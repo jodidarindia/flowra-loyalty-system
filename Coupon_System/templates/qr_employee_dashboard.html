@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}QR Employee Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-5">
+        <div class="dashboard-header mb-4">
+            <h2>{{ session['company_name'] }} QR Panel</h2>
+            <p>Generate QR coupons, import products, and manage coupon activity.</p>
+        </div>
+
+        <div class="row g-4">
+
+            <!-- Import Excel -->
+            <div class="col-md-6 col-lg-4">
+                <div class="dashboard-card">
+                    <div class="dashboard-icon gradient-2">
+                        <i class="fa-solid fa-file-excel"></i>
+                    </div>
+                    <h5>Import Excel</h5>
+                    <p>Upload product Excel data and generate coupon QR records in bulk.</p>
+                    <a href="{{ url_for('admin.import_excel_qr') }}" class="btn flowra-btn-sm">
+                        Open Module
+                    </a>
+                </div>
+            </div>
+
+            <!-- View Coupons -->
+            <div class="col-md-6 col-lg-4">
+                <div class="dashboard-card">
+                    <div class="dashboard-icon gradient-3">
+                        <i class="fa-solid fa-ticket"></i>
+                    </div>
+                    <h5>View Coupons</h5>
+                    <p>See generated coupons, edit coupon details, and manage coupon records.</p>
+                    <a href="{{ url_for('admin.coupon_list') }}" class="btn flowra-btn-sm">
+                        Open Module
+                    </a>
+                </div>
+            </div>
+
+            <!-- Coupon Generator -->
+            <div class="col-md-6 col-lg-4">
+                <div class="dashboard-card">
+                    <div class="dashboard-icon gradient-4">
+                        <i class="fa-solid fa-barcode"></i>
+                    </div>
+                    <h5>Label Generator</h5>
+                    <p>Search by part number or product name and generate final coupon labels.</p>
+                    <a href="{{ url_for('admin.coupon_generator') }}" class="btn flowra-btn-sm">
+                        Open Module
+                    </a>
+                </div>
+            </div>
+
+            {% if modules %}
+                {% for module in modules %}
+                    {% if module.title not in ['Generate QR', 'Import Excel', 'View Coupons', 'Coupon Generator'] %}
+                    <div class="col-md-6 col-lg-4">
+                        <div class="dashboard-card">
+                            <div class="dashboard-icon {{ module.gradient }}">
+                                <i class="{{ module.icon }}"></i>
+                            </div>
+                            <h5>{{ module.title }}</h5>
+                            <p>{{ module.description }}</p>
+                            <a href="{{ url_for(module.route) }}" class="btn flowra-btn-sm">
+                                {{ module.button_text }}
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+{% endblock %}

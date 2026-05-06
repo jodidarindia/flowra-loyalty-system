@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Company Management{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('auth.super_admin_dashboard') }}">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-5">
+        <div class="company-header">
+            <div>
+                <div class="mb-3">
+                    <a href="{{ url_for('auth.super_admin_dashboard') }}" class="btn back-btn">
+                        <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+                <h2>Company Management</h2>
+                <p>Create and manage company applications from one central FLOWRA dashboard.</p>
+            </div>
+        </div>
+
+        <div class="row g-4 mt-2">
+            <div class="col-lg-4">
+                <div class="company-form-card">
+                    <h4>Create New Company</h4>
+                    <p class="mb-4">Set up a new branded application with admin details.</p>
+
+                    <form method="POST" action="{{ url_for('admin.company_management') }}" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label class="form-label custom-label">Company Name</label>
+                            <input type="text" name="company_name" class="form-control modern-input" placeholder="Enter company name" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label custom-label">Company Admin Name</label>
+                            <input type="text" name="admin_name" class="form-control modern-input" placeholder="Enter admin name" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label custom-label">Admin Email</label>
+                            <input type="email" name="admin_email" class="form-control modern-input" placeholder="Enter admin email" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label custom-label">Admin Password</label>
+                            <input type="password" name="admin_password" class="form-control modern-input" placeholder="Enter admin password" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label custom-label">Logo / Branding</label>
+                            <input type="file" name="company_logo" class="form-control modern-input">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label custom-label">Status</label>
+                            <select name="status" class="form-select modern-input" required>
+                                <option value="Active">Active</option>
+                                <option value="Inactive">Inactive</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" class="btn flowra-btn w-100 mt-2">Create Company</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="col-lg-8">
+                <div class="company-table-card">
+                    <div class="table-head">
+                        <h4>All Company Applications</h4>
+                        <input type="text" class="form-control search-input" placeholder="Search company...">
+                    </div>
+
+                    <div class="table-responsive mt-4">
+                        <table class="table align-middle company-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Company</th>
+                                    <th>Admin</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for company in companies %}
+                                <tr>
+                                    <td>#{{ company.id }}</td>
+                                    <td>{{ company.name }}</td>
+                                    <td>{{ company.admin }}</td>
+                                    <td>
+                                        {% if company.status == "Active" %}
+                                            <span class="status-badge active-badge">Active</span>
+                                        {% else %}
+                                            <span class="status-badge inactive-badge">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="action-btns">
+                                            <a href="{{ url_for('admin.edit_company', company_id=company.id) }}" class="btn btn-sm btn-edit">Edit</a>
+
+                                            <form method="POST" action="{{ url_for('admin.delete_company', company_id=company.id) }}" style="display:inline;">
+                                                <button type="submit" class="btn btn-sm btn-delete"
+                                                    onclick="return confirm('Are you sure you want to remove this company from the list?')">
+                                                    Delete
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">
+                                        No companies created yet.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

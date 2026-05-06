@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}Company Admin Retailers{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <div class="row g-4">
+            <!-- Sidebar -->
+            <div class="col-lg-3 col-xl-2">
+                <div class="dashboard-sidebar">
+                    <div class="sidebar-brand">
+                        <h5>{{ session['company_name'] }}</h5>
+                        <p>Admin Control Panel</p>
+                    </div>
+
+                    <div class="sidebar-menu">
+                        <a href="{{ url_for('admin.company_admin_dashboard') }}" class="sidebar-link">
+                            <i class="fa-solid fa-house"></i>
+                            <span>Dashboard</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_employees_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-user-plus"></i>
+                            <span>Employees</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_distributors_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-truck"></i>
+                            <span>Distributors</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_retailers_page') }}" class="sidebar-link active">
+                            <i class="fa-solid fa-shop"></i>
+                            <span>Retailers</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_mechanics_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-screwdriver-wrench"></i>
+                            <span>Mechanics</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_products_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-box-open"></i>
+                            <span>Products</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_banners_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-images"></i>
+                            <span>Banners</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_catalogues_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-book-open"></i>
+                            <span>Catalogues</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_analytics') }}" class="sidebar-link">
+                            <i class="fa-solid fa-chart-line"></i>
+                            <span>Analytics</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_history') }}" class="sidebar-link">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>History</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main -->
+            <div class="col-lg-9 col-xl-10">
+                <div class="dashboard-header mb-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div>
+                        <h2>Retailers Management</h2>
+                        <p>Add, view and manage all retailers of your company.</p>
+                    </div>
+
+                    <button class="btn flowra-btn-sm px-4" data-bs-toggle="modal" data-bs-target="#addRetailerModal">
+                        <i class="fa-solid fa-plus me-2"></i>Add Retailer
+                    </button>
+                </div>
+
+                <div class="dashboard-card p-0 overflow-hidden">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 distributor-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Dealer Code</th>
+                                    <th>Name</th>
+                                    <th>Mobile</th>
+                                    <th>Email</th>
+                                    <th>PAN</th>
+                                    <th>GST</th>
+                                    <th>City</th>
+                                    <th>State</th>
+                                    <th>Address</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if retailers %}
+                                    {% for retailer in retailers %}
+                                    <tr>
+                                        <td>{{ retailer.id }}</td>
+                                        <td>{{ retailer.dealer_code or '-' }}</td>
+                                        <td>{{ retailer.name }}</td>
+                                        <td>{{ retailer.mobile or '-' }}</td>
+                                        <td>{{ retailer.email or '-' }}</td>
+                                        <td>{{ retailer.pan or '-' }}</td>
+                                        <td>{{ retailer.gst or '-' }}</td>
+                                        <td>{{ retailer.city or '-' }}</td>
+                                        <td>{{ retailer.state or '-' }}</td>
+                                        <td>{{ retailer.address or '-' }}</td>
+                                        <td>
+                                            <a href="{{ url_for('admin.edit_retailer', retailer_id=retailer.id) }}"
+                                               class="btn btn-warning btn-sm">
+                                                <i class="fa fa-edit"></i>
+                                            </a>
+
+                                            <form method="POST"
+                                                  action="{{ url_for('admin.delete_entity', entity_type='retailers', record_id=retailer.id) }}"
+                                                  style="display:inline;">
+                                                <button type="submit" class="btn btn-danger btn-sm"
+                                                        onclick="return confirm('Delete this retailer?')">
+                                                    <i class="fa fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="11" class="text-center py-5 text-muted">
+                                            No retailers found.
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Retailer Modal -->
+<div class="modal fade" id="addRetailerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content distributor-modal">
+            <div class="modal-header border-0">
+                <h5 class="modal-title">{% if edit_retailer %}Edit Retailer{% else %}Add Retailer{% endif %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form method="POST"
+                  action="{% if edit_retailer %}{{ url_for('admin.edit_retailer', retailer_id=edit_retailer.id) }}{% else %}{{ url_for('admin.add_retailer') }}{% endif %}">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Dealer Code</label>
+                            <input type="text" name="dealer_code" class="form-control form-control-custom"
+                                   value="{{ edit_retailer.dealer_code if edit_retailer else '' }}">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Name</label>
+                            <input type="text" name="name" class="form-control form-control-custom" required
+                                   value="{{ edit_retailer.name if edit_retailer else '' }}">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Mobile</label>
+                            <input type="text" name="mobile" class="form-control form-control-custom"
+                                   value="{{ edit_retailer.mobile if edit_retailer else '' }}">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Email</label>
+                            <input type="email" name="email" class="form-control form-control-custom"
+                                   value="{{ edit_retailer.email if edit_retailer else '' }}">
+                        </div>
+
+                        {% if not edit_retailer %}
+                        <div class="col-md-6">
+                            <label class="form-label">Password</label>
+                            <input type="password" name="password" class="form-control form-control-custom">
+                        </div>
+                        {% endif %}
+
+                        <div class="col-md-6">
+                            <label class="form-label">PAN</label>
+                            <input type="text" name="pan" class="form-control form-control-custom"
+                                   value="{{ edit_retailer.pan if edit_retailer else '' }}">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">GST</label>
+                            <input type="text" name="gst" class="form-control form-control-custom"
+                                   value="{{ edit_retailer.gst if edit_retailer else '' }}">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">City</label>
+                            <input type="text" name="city" class="form-control form-control-custom"
+                                   value="{{ edit_retailer.city if edit_retailer else '' }}">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">State</label>
+                            <input type="text" name="state" class="form-control form-control-custom"
+                                   value="{{ edit_retailer.state if edit_retailer else '' }}">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Address</label>
+                            <textarea name="address" rows="3" class="form-control form-control-custom">{{ edit_retailer.address if edit_retailer else '' }}</textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn flowra-btn-sm px-4">
+                        {% if edit_retailer %}Update Retailer{% else %}Save Retailer{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% if edit_retailer %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    var modal = new bootstrap.Modal(document.getElementById('addRetailerModal'));
+    modal.show();
+});
+</script>
+{% endif %}
+{% endblock %}

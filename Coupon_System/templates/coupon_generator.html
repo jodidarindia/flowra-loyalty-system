@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+{% block title %}Coupon Generator{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <div class="container py-5">
+
+        <div class="mb-3 d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('admin.qr_employee_dashboard') }}" class="btn back-btn">
+                <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+
+        <div class="company-form-card mb-4">
+            <h4>Generate Coupon Label</h4>
+            <p class="mb-4">Select part number. System will fetch coupon details automatically.</p>
+
+            <form method="POST" class="row g-3 align-items-end">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="col-md-4">
+                    <label class="form-label custom-label">Part No</label>
+                    <select name="search_text" class="form-select modern-input" required>
+                        <option value="">Select Part No</option>
+                        {% for p in parts %}
+                            <option value="{{ p[0] }}" {% if search_text == p[0] %}selected{% endif %}>
+                                {{ p[0] }}{% if p[1] %} - {{ p[1] }}{% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label custom-label">Coupon Count</label>
+                    <input type="number"
+                           name="count"
+                           class="form-control modern-input"
+                           min="1"
+                           max="100"
+                           value="{{ count or 10 }}"
+                           required>
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label custom-label">Coupon Size</label>
+                    <select name="qr_size" class="form-select modern-input" required>
+                        <option value="25x50" {% if selected_qr_size == "25x50" %}selected{% endif %}>25 x 50 mm</option>
+                        <option value="50x50" {% if selected_qr_size == "50x50" %}selected{% endif %}>50 x 50 mm</option>
+                    </select>
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label custom-label">Brand Name</label>
+                    <input type="text"
+                           name="brand_name"
+                           class="form-control modern-input"
+                           placeholder="e.g. VOLTAGE"
+                           value="{{ brand_name or 'VOLTAGE' }}"
+                           required>
+                </div>
+
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn flowra-btn">
+                        Print Coupon
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        {% if coupon %}
+        <div class="company-form-card">
+            <h4 class="mb-3">Coupon Preview</h4>
+
+            <div class="coupon-preview-wrap">
+                <div class="real-coupon-label {% if selected_qr_size == '50x50' %}size-50x50{% else %}size-25x50{% endif %}">
+                    
+                    <div class="coupon-left-strip">
+                        {{ brand_name or 'VOLTAGE' }}
+                    </div>
+
+                    <div class="coupon-main-content">
+                        <div class="coupon-text-area">
+                            <div class="coupon-part-no">{{ coupon.part_no or '-' }}</div>
+
+                            <div class="coupon-line">
+                                <span class="coupon-label-key">MRP</span>
+                                <span class="coupon-colon">:</span>
+                                <span class="coupon-label-value">Rs. {{ coupon.mrp or 0 }}</span>
+                            </div>
+
+                            <div class="coupon-line">
+                                <span class="coupon-label-key">PACK</span>
+                                <span class="coupon-colon">:</span>
+                                <span class="coupon-label-value">{{ coupon.pack_size or '-' }}</span>
+                            </div>
+
+                            <div class="coupon-line">
+                                <span class="coupon-label-key">POINTS</span>
+                                <span class="coupon-colon">:</span>
+                                <span class="coupon-label-value">{{ coupon.points or 0 }}</span>
+                            </div>
+
+                            <div class="coupon-code-bottom">{{ coupon.code or 'AUTO GENERATED' }}</div>
+                        </div>
+
+                        <div class="coupon-qr-area">
+                            <div class="coupon-top-tag">COUPON</div>
+                            {% if coupon.qr_image %}
+                                <img src="{{ url_for('static', filename=coupon.qr_image) }}" alt="QR">
+                            {% else %}
+                                <div class="qr-placeholder">QR</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+
+<style>
+.company-form-card .form-select,
+.company-form-card .form-control,
+.company-form-card .btn{
+    height:48px;
+}
+
+.company-form-card .btn{
+    white-space:nowrap;
+}
+
+.coupon-preview-wrap{
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+    padding:0;
+    margin:0;
+    overflow:visible;
+}
+
+.real-coupon-label{
+    background:#fff;
+    border:1px solid #000;
+    border-radius:0;
+    overflow:hidden;
+    display:flex;
+    box-shadow:none;
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    page-break-inside:avoid;
+    break-inside:avoid;
+}
+
+.real-coupon-label.size-25x50{
+    width:260px;
+    height:130px;
+}
+
+.real-coupon-label.size-50x50{
+    width:260px;
+    height:260px;
+}
+
+.coupon-left-strip{
+    width:16%;
+    background:#000;
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    writing-mode:vertical-rl;
+    transform:rotate(180deg);
+    font-weight:900;
+    font-size:13px;
+    letter-spacing:1px;
+    flex-shrink:0;
+    padding:0;
+    margin:0;
+    text-transform:uppercase;
+}
+
+.coupon-main-content{
+    flex:1;
+    display:flex;
+    justify-content:space-between;
+    align-items:stretch;
+    padding:4px;
+    gap:4px;
+    box-sizing:border-box;
+}
+
+.coupon-text-area{
+    width:44%;
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-start !important;
+    align-items:flex-start !important;
+    gap:0 !important;
+    padding:0 !important;
+    margin:0 !important;
+}
+
+.coupon-part-no{
+    font-size:16px;
+    font-weight:900;
+    color:#000;
+    line-height:1.02;
+    word-break:break-word;
+    margin:0 0 3px 0;
+}
+
+.coupon-line{
+    display:flex;
+    align-items:center;
+    gap:2px;
+    font-size:12px;
+    font-weight:900;
+    color:#000;
+    line-height:1.02;
+    margin:0 0 2px 0;
+}
+
+.coupon-label-key{
+    width:42px;
+    display:inline-block;
+    flex-shrink:0;
+}
+
+.coupon-colon{
+    width:8px;
+    text-align:center;
+    flex-shrink:0;
+}
+
+.coupon-label-value{
+    flex:1;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+
+.coupon-code-bottom{
+    font-size:12px;
+    font-weight:900;
+    color:#000;
+    line-height:1;
+    word-break:break-all;
+    margin-top:3px;
+}
+
+.coupon-qr-area{
+    width:44%;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    justify-content:flex-start;
+    flex-shrink:0;
+    padding:0;
+    margin:0;
+    position:relative;
+}
+
+.coupon-top-tag{
+    font-size:10px;
+    font-weight:900;
+    color:#000;
+    line-height:1;
+    margin:0 0 2px 0;
+    text-align:right;
+    letter-spacing:0.6px;
+    text-transform:uppercase;
+}
+
+.coupon-qr-area img{
+    width:100%;
+    max-width:98px;
+    max-height:98px;
+    object-fit:contain;
+    display:block;
+    image-rendering:pixelated;
+    filter:contrast(200%) brightness(0.8);
+    margin-left:auto;
+}
+
+.qr-placeholder{
+    width:98px;
+    height:98px;
+    border:1px dashed #000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:14px;
+    font-weight:800;
+    color:#000;
+    margin-left:auto;
+}
+
+@media (max-width: 576px){
+    .real-coupon-label.size-25x50,
+    .real-coupon-label.size-50x50{
+        width:100%;
+        max-width:260px;
+    }
+}
+</style>
+{% endblock %}

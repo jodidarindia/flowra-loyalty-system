@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Edit Employee{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+
+    <!-- NAVBAR -->
+    <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- MAIN -->
+    <div class="container-fluid py-4 px-4">
+        <div class="row g-4">
+
+            <!-- SIDEBAR -->
+            <div class="col-lg-3 col-xl-2">
+                <div class="dashboard-sidebar">
+
+                    <div class="sidebar-brand">
+                        <h5>{{ session['company_name'] }}</h5>
+                        <p>Admin Control Panel</p>
+                    </div>
+
+                    <div class="sidebar-menu">
+                        <a href="{{ url_for('admin.company_admin_dashboard') }}" class="sidebar-link">
+                            <i class="fa-solid fa-house"></i> Dashboard
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_employees_page') }}" class="sidebar-link active">
+                            <i class="fa-solid fa-user-plus"></i> Employees
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_distributors_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-truck"></i> Distributors
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_retailers_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-shop"></i> Retailers
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_mechanics_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-screwdriver-wrench"></i> Mechanics
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_products_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-box-open"></i> Products
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_catalogues_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-book-open"></i> Catalogues
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_analytics') }}" class="sidebar-link">
+                            <i class="fa-solid fa-chart-line"></i> Analytics
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_history') }}" class="sidebar-link">
+                            <i class="fa-solid fa-clock-rotate-left"></i> History
+                        </a>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- PAGE CONTENT -->
+            <div class="col-lg-9 col-xl-10">
+
+                <div class="dashboard-header mb-4">
+                    <h2 class="mb-1">Edit Employee</h2>
+                    <p class="text-muted mb-0">Update employee details.</p>
+                </div>
+
+                <div class="company-form-card mx-auto" style="max-width: 760px;">
+                    <form method="POST" action="{{ url_for('admin.edit_employee', employee_id=employee.id) }}">
+
+                        <!-- ✅ CSRF TOKEN -->
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <!-- NAME -->
+                        <div class="mb-3">
+                            <label class="form-label custom-label">Name</label>
+                            <input type="text"
+                                   name="name"
+                                   class="form-control modern-input"
+                                   value="{{ employee.name }}"
+                                   required>
+                        </div>
+
+                        <!-- EMAIL -->
+                        <div class="mb-3">
+                            <label class="form-label custom-label">Email</label>
+                            <input type="email"
+                                   name="email"
+                                   class="form-control modern-input"
+                                   value="{{ employee.email }}"
+                                   required>
+                        </div>
+
+                        <!-- PASSWORD -->
+                        <div class="mb-3">
+                            <label class="form-label custom-label">New Password</label>
+                            <input type="password"
+                                   name="password"
+                                   class="form-control modern-input"
+                                   placeholder="Leave blank if you do not want to change password">
+                            <small class="text-muted">Only fill this if you want to update the password.</small>
+                        </div>
+
+                        <!-- ROLE -->
+                        <div class="mb-4">
+                            <label class="form-label custom-label">Role</label>
+                            <select name="role" class="form-select modern-input" required>
+                                <option value="qr_employee" {% if employee.role == "qr_employee" %}selected{% endif %}>QR Employee</option>
+                                <option value="employee" {% if employee.role == "employee" %}selected{% endif %}>General Employee</option>
+                                <option value="sales" {% if employee.role == "sales" %}selected{% endif %}>Salesman</option>
+                            </select>
+                        </div>
+
+                        <div class="d-flex gap-3">
+                            <a href="{{ url_for('admin.manage_employees') }}" class="btn btn-light w-50">
+                                Back
+                            </a>
+                            <button type="submit" class="btn flowra-btn w-50">
+                                Update Employee
+                            </button>
+                        </div>
+
+                    </form>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

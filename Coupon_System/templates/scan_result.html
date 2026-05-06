@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Coupon Scan</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        body{
+            font-family: 'Poppins', sans-serif;
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            height:100vh;
+            background: linear-gradient(135deg,#2563eb,#7c3aed);
+            color:white;
+            text-align:center;
+        }
+
+        .card{
+            background:white;
+            color:#111;
+            padding:30px;
+            border-radius:20px;
+            width:300px;
+            box-shadow:0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .success{color:green;}
+        .error{color:red;}
+    </style>
+</head>
+<body>
+
+<div class="card">
+
+    {% if status == "success" %}
+        <h2 class="success">✅ Coupon Applied</h2>
+        <p><b>{{ points }}</b> Points Added</p>
+
+    {% elif status == "already" %}
+        <h2 class="error">⚠ Already Used</h2>
+        <p>This coupon is already redeemed</p>
+
+    {% else %}
+        <h2 class="error">❌ Invalid Coupon</h2>
+        <p>Coupon not found</p>
+    {% endif %}
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Create Order{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <div class="container py-5">
+
+        <div class="mb-3">
+            <a href="{{ url_for('admin.salesman_orders') }}" class="btn back-btn">
+                <i class="fa-solid fa-arrow-left"></i> Back to Orders
+            </a>
+        </div>
+
+        <div class="company-form-card mx-auto" style="max-width:900px;">
+            <h4>Create Order</h4>
+
+            <form method="POST">
+                <div class="mb-3">
+                    <label class="form-label">Dealer</label>
+                    <select name="dealer_id" class="form-select modern-input" required>
+                        {% for d in dealers %}
+                        <option value="{{ d[0] }}">{{ d[1] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Product search -->
+                <div class="mb-3">
+                    <label class="form-label">Search Part No / Product Name</label>
+                    <input type="text" id="productSearch" class="form-control modern-input"
+                           placeholder="Type part number or product name">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Matching Products</label>
+                    <select id="productDropdown" class="form-select modern-input">
+                        <option value="">-- Select matching product --</option>
+                    </select>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Part No</label>
+                        <input type="text" id="product_part_no" name="product_part_no"
+                               class="form-control modern-input" placeholder="Part No" required readonly>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Product Name</label>
+                        <input type="text" id="product_name" name="product_name"
+                               class="form-control modern-input" placeholder="Product Name" required readonly>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Quantity</label>
+                        <input type="number" id="qty" name="qty" class="form-control modern-input"
+                               placeholder="Qty" value="1" min="1" required>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Rate</label>
+                        <input type="number" step="0.01" id="rate" name="rate"
+                               class="form-control modern-input" placeholder="Rate" required readonly>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Amount</label>
+                        <input type="number" step="0.01" id="amount" name="amount"
+                               class="form-control modern-input" placeholder="Amount" required readonly>
+                    </div>
+
+                    <div class="col-md-12">
+                        <label class="form-label">Remarks</label>
+                        <textarea name="remarks" class="form-control modern-input" placeholder="Remarks"></textarea>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn flowra-btn mt-4 w-100">Create Order</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+let productItems = [];
+
+async function fetchProducts(query = "") {
+    try {
+        const response = await fetch(`/salesman/products/search?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+        productItems = data.items || [];
+
+        const dropdown = document.getElementById("productDropdown");
+        dropdown.innerHTML = `<option value="">-- Select matching product --</option>`;
+
+        productItems.forEach((item, index) => {
+            const option = document.createElement("option");
+            option.value = index;
+            option.textContent = `${item.part_no} - ${item.product_name} | Rate: ${item.dlp}`;
+            dropdown.appendChild(option);
+        });
+    } catch (err) {
+        console.error("Product fetch error:", err);
+    }
+}
+
+function updateAmount() {
+    const qty = parseFloat(document.getElementById("qty").value || 0);
+    const rate = parseFloat(document.getElementById("rate").value || 0);
+    const amount = qty * rate;
+    document.getElementById("amount").value = amount.toFixed(2);
+}
+
+document.getElementById("productSearch").addEventListener("input", function() {
+    fetchProducts(this.value.trim());
+});
+
+document.getElementById("productDropdown").addEventListener("change", function() {
+    const selectedIndex = this.value;
+    if (selectedIndex === "") return;
+
+    const item = productItems[selectedIndex];
+    document.getElementById("product_part_no").value = item.part_no || "";
+    document.getElementById("product_name").value = item.product_name || "";
+    document.getElementById("rate").value = item.dlp || 0;
+
+    updateAmount();
+});
+
+document.getElementById("qty").addEventListener("input", updateAmount);
+
+// optional initial load
+fetchProducts("");
+</script>
+{% endblock %}

@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}Company Admin Banners{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <!-- NAVBAR -->
+    <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- MAIN LAYOUT -->
+    <div class="container-fluid py-4 px-4">
+        <div class="row g-4">
+
+            <!-- SIDEBAR -->
+            <div class="col-lg-3 col-xl-2">
+                <div class="dashboard-sidebar">
+                    <div class="sidebar-brand">
+                        <h5>{{ session['company_name'] }}</h5>
+                        <p>Admin Control Panel</p>
+                    </div>
+
+                    <div class="sidebar-menu">
+                        <a href="{{ url_for('admin.company_admin_dashboard') }}" class="sidebar-link">
+                            <i class="fa-solid fa-house"></i>
+                            <span>Dashboard</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_employees_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-user-plus"></i>
+                            <span>Employees</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_distributors_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-truck"></i>
+                            <span>Distributors</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_retailers_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-shop"></i>
+                            <span>Retailers</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_mechanics_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-screwdriver-wrench"></i>
+                            <span>Mechanics</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_products_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-box-open"></i>
+                            <span>Products</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_banners_page') }}" class="sidebar-link active">
+                            <i class="fa-solid fa-images"></i>
+                            <span>Banners</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_catalogues_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-book-open"></i>
+                            <span>Catalogues</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_analytics') }}" class="sidebar-link">
+                            <i class="fa-solid fa-chart-line"></i>
+                            <span>Analytics</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_history') }}" class="sidebar-link">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>History</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PAGE CONTENT -->
+            <div class="col-lg-9 col-xl-10">
+
+                <div class="dashboard-header mb-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div>
+                        <h2 class="mb-1">Manage Banners</h2>
+                        <p class="mb-0 text-muted">Add and manage company banners here.</p>
+                    </div>
+
+                    <button type="button" class="btn flowra-btn" onclick="toggleBannerForm()">
+                        <i class="fa-solid fa-plus"></i> Add Banner
+                    </button>
+                </div>
+
+                <!-- HIDDEN FORM -->
+                <div id="bannerForm" class="company-form-card mb-4" style="display:none;">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="mb-0">Add Banner</h4>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleBannerForm()">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <form method="POST" action="{{ url_for('admin.add_banner') }}" enctype="multipart/form-data" class="row g-3">
+                        <div class="col-md-5">
+                            <label class="form-label">Banner Title</label>
+                            <input type="text" name="title" class="form-control modern-input" placeholder="Enter banner title" required>
+                        </div>
+
+                        <div class="col-md-5">
+                            <label class="form-label">Banner Image</label>
+                            <input type="file" name="image" class="form-control modern-input" accept="image/*" required onchange="previewBanner(event)">
+                        </div>
+
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn flowra-btn w-100">Save</button>
+                        </div>
+
+                        <div class="col-12" id="previewBox" style="display:none;">
+                            <label class="form-label">Preview</label>
+                            <div class="p-3 border rounded-3 bg-light">
+                                <img id="bannerPreview" src="" alt="Preview" style="max-height:140px; border-radius:10px;">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- TABLE -->
+                <div class="company-table-card">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <h4 class="mb-0">All Banners</h4>
+                        <span class="text-muted">Total: {{ banners|length }}</span>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table company-table align-middle">
+                            <thead>
+                                <tr>
+                                    <th style="width: 80px;">#</th>
+                                    <th>Title</th>
+                                    <th style="width: 220px;">Image</th>
+                                    <th style="width: 130px;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if banners %}
+                                    {% for banner in banners %}
+                                    <tr>
+                                        <td>{{ loop.index }}</td>
+                                        <td>{{ banner[1] }}</td>
+                                        <td>
+                                            {% if banner[2] %}
+                                                <img src="{{ url_for('static', filename='uploads/' ~ banner[2]) }}"
+                                                     alt="{{ banner[1] }}"
+                                                     style="height:70px; width:auto; border-radius:10px; object-fit:cover; border:1px solid #e5e7eb; padding:2px; background:#fff;">
+                                            {% else %}
+                                                <span class="text-muted">No Image</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <form action="{{ url_for('admin.delete_banner', id=banner[0]) }}" method="POST" style="display:inline;">
+                                                <button type="submit"
+                                                        class="btn btn-danger btn-sm"
+                                                        onclick="return confirm('Delete this banner?')">
+                                                    Delete
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center py-5">
+                                            <div class="text-muted">
+                                                <i class="fa-solid fa-image fa-2x mb-3 d-block"></i>
+                                                No banners found.
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleBannerForm() {
+    const form = document.getElementById("bannerForm");
+    form.style.display = form.style.display === "none" ? "block" : "none";
+}
+
+function previewBanner(event) {
+    const file = event.target.files[0];
+    const preview = document.getElementById("bannerPreview");
+    const previewBox = document.getElementById("previewBox");
+
+    if (file) {
+        preview.src = URL.createObjectURL(file);
+        previewBox.style.display = "block";
+    } else {
+        preview.src = "";
+        previewBox.style.display = "none";
+    }
+}
+</script>
+{% endblock %}

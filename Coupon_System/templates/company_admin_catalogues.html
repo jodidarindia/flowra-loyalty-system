@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}Company Admin Catalogues{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <!-- NAVBAR -->
+    <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTENT -->
+    <div class="container-fluid py-4 px-4">
+        <div class="row g-4">
+
+            <!-- COMMON SIDEBAR -->
+            <div class="col-lg-3 col-xl-2">
+                <div class="dashboard-sidebar">
+                    <div class="sidebar-brand">
+                        <h5>{{ session['company_name'] }}</h5>
+                        <p>Admin Control Panel</p>
+                    </div>
+
+                    <div class="sidebar-menu">
+                        <a href="{{ url_for('admin.company_admin_dashboard') }}" class="sidebar-link">
+                            <i class="fa-solid fa-house"></i>
+                            <span>Dashboard</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_employees_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-user-plus"></i>
+                            <span>Employees</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_distributors_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-truck"></i>
+                            <span>Distributors</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_retailers_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-shop"></i>
+                            <span>Retailers</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_mechanics_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-screwdriver-wrench"></i>
+                            <span>Mechanics</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_products_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-box-open"></i>
+                            <span>Products</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_banners_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-images"></i>
+                            <span>Banners</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_catalogues_page') }}" class="sidebar-link active">
+                            <i class="fa-solid fa-book-open"></i>
+                            <span>Catalogues</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_analytics') }}" class="sidebar-link">
+                            <i class="fa-solid fa-chart-line"></i>
+                            <span>Analytics</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_history') }}" class="sidebar-link">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>History</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PAGE CONTENT -->
+            <div class="col-lg-9 col-xl-10">
+                <div class="dashboard-header mb-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div>
+                        <h2 class="mb-1">Catalogue Management</h2>
+                        <p class="mb-0 text-muted">Upload and manage your PDF catalogues here.</p>
+                    </div>
+
+                    <button class="btn flowra-btn-sm px-4" data-bs-toggle="modal" data-bs-target="#addCatalogueModal">
+                        <i class="fa-solid fa-plus me-2"></i>Upload PDF
+                    </button>
+                </div>
+
+                <div class="catalogue-summary mb-4">
+                    <div class="summary-left">
+                        <div class="summary-icon">
+                            <i class="fa-solid fa-file-pdf"></i>
+                        </div>
+                        <div>
+                            <h5 class="mb-1">Catalogue Library</h5>
+                            <p class="mb-0 text-muted">All uploaded PDF catalogues will appear here.</p>
+                        </div>
+                    </div>
+
+                    <div class="summary-count">
+                        {{ catalogues|length }} Files
+                    </div>
+                </div>
+
+                <div class="dashboard-card p-0 overflow-hidden">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 distributor-table catalogue-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Title</th>
+                                    <th>File Name</th>
+                                    <th>Open PDF</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if catalogues %}
+                                    {% for c in catalogues %}
+                                    <tr>
+                                        <td>{{ loop.index }}</td>
+                                        <td>{{ c.title }}</td>
+                                        <td>{{ c.file_name }}</td>
+                                        <td>
+                                            <a href="{{ url_for('static', filename=c.file_path) }}" target="_blank" class="btn btn-sm btn-primary">
+                                                View PDF
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <form method="POST" action="{{ url_for('admin.delete_catalogue', id=c.id) }}" style="display:inline;">
+                                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center py-5">
+                                            <div class="empty-state">
+                                                <i class="fa-solid fa-file-circle-xmark"></i>
+                                                <h6 class="mt-3 mb-1">No catalogues uploaded</h6>
+                                                <p class="text-muted mb-3">Start by uploading your first PDF catalogue.</p>
+
+                                                <button class="btn flowra-btn px-4"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#addCatalogueModal">
+                                                    Upload Now
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- UPLOAD MODAL -->
+<div class="modal fade" id="addCatalogueModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content distributor-modal">
+            <div class="modal-header border-0">
+                <h5 class="modal-title">Upload Catalogue PDF</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form method="POST" action="{{ url_for('admin.add_catalogue') }}" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Title</label>
+                        <input type="text" name="title" class="form-control form-control-custom" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">PDF File</label>
+                        <input type="file" name="pdf_file" class="form-control form-control-custom" accept=".pdf" required>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn flowra-btn-sm px-4">Upload</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

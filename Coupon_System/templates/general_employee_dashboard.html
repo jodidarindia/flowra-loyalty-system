@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}General Employee Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+     <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-5">
+
+      
+
+        <div class="dashboard-header mb-4">
+            <h2>General Employee Dashboard</h2>
+            <p>Monitor dealers, redeem scanned coupons, and view all orders.</p>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-md-3">
+                <div class="dashboard-card">
+                    <h5>Pending Redemptions</h5>
+                    <h3>{{ pending_redemptions }}</h3>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="dashboard-card">
+                    <h5>Redeemed Coupons</h5>
+                    <h3>{{ redeemed_count }}</h3>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="dashboard-card">
+                    <h5>Total Dealers</h5>
+                    <h3>{{ total_dealers }}</h3>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="dashboard-card">
+                    <h5>Total Wallet Points</h5>
+                    <h3>{{ total_wallet_points }}</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-md-3">
+                <div class="dashboard-card">
+                    <h5>Pending Redemptions</h5>
+                    <a href="{{ url_for('admin.pending_redemptions') }}" class="btn flowra-btn-sm">
+                        Open Module
+                    </a>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="dashboard-card">
+                    <h5>Dealer Wallets</h5>
+                    <a href="{{ url_for('admin.dealer_wallets') }}" class="btn flowra-btn-sm">
+                        Open Module
+                    </a>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="dashboard-card">
+                    <h5>Wallet Transactions</h5>
+                    <a href="{{ url_for('admin.wallet_transactions') }}" class="btn flowra-btn-sm">
+                        Open Module
+                    </a>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="dashboard-card">
+                    <h5>View All Orders</h5>
+                    <a href="{{ url_for('admin.general_employee_orders') }}" class="btn flowra-btn-sm">
+                        Open Module
+                    </a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

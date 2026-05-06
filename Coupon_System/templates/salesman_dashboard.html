@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Salesman Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <div class="row g-4">
+
+            <!-- Sidebar -->
+            <div class="col-lg-3 col-xl-2">
+                <div class="dashboard-sidebar">
+                    <div class="sidebar-brand">
+                        <h5>{{ session['company_name'] }}</h5>
+                        <p>Salesman Control Panel</p>
+                    </div>
+
+                    <div class="sidebar-menu">
+                        <a href="{{ url_for('admin.salesman_dashboard') }}" class="sidebar-link active">
+                            <i class="fa-solid fa-house"></i>
+                            <span>Dashboard</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_distributors_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-truck"></i>
+                            <span>My Dealers</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.salesman_orders') }}" class="sidebar-link">
+                            <i class="fa-solid fa-cart-shopping"></i>
+                            <span>Orders</span>
+                        </a>
+
+                       
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main -->
+            <div class="col-lg-9 col-xl-10">
+                <div class="dashboard-header mb-4">
+                    <h2>Salesman Dashboard</h2>
+                    <p>Manage your dealers and orders.</p>
+                </div>
+
+                <!-- Stats -->
+                <div class="row g-4 mb-4">
+                    <div class="col-md-6 col-xl-3">
+                        <div class="dashboard-card text-center">
+                            <h5>Total Dealers</h5>
+                            <h3>{{ total_dealers }}</h3>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-3">
+                        <div class="dashboard-card text-center">
+                            <h5>Total Orders</h5>
+                            <h3>{{ total_orders }}</h3>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-3">
+                        <div class="dashboard-card text-center">
+                            <h5>Pending Orders</h5>
+                            <h3>{{ pending_orders }}</h3>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-3">
+                        <div class="dashboard-card text-center">
+                            <h5>Completed Orders</h5>
+                            <h3>{{ completed_orders }}</h3>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modules -->
+                <div class="row g-4">
+                    <div class="col-md-6 col-lg-4">
+                        <div class="dashboard-card">
+                            <div class="dashboard-icon gradient-1">
+                                <i class="fa-solid fa-truck"></i>
+                            </div>
+                            <h5>My Dealers</h5>
+                            <p>View and manage only your mapped dealers. You can also add new dealers from there.</p>
+                            <a href="{{ url_for('admin.company_admin_distributors_page') }}" class="btn flowra-btn-sm">
+                                Open Module
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-lg-4">
+                        <div class="dashboard-card">
+                            <div class="dashboard-icon gradient-2">
+                                <i class="fa-solid fa-cart-shopping"></i>
+                            </div>
+                            <h5>Orders</h5>
+                            <p>View all orders created by you and track their current status.</p>
+                            <a href="{{ url_for('admin.salesman_orders') }}" class="btn flowra-btn-sm">
+                                Open Module
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-lg-4">
+                        <div class="dashboard-card">
+                            <div class="dashboard-icon gradient-3">
+                                <i class="fa-solid fa-file-circle-plus"></i>
+                            </div>
+                            <h5>Create Order</h5>
+                            <p>Create a new order for your dealers quickly and easily.</p>
+                            <a href="{{ url_for('admin.salesman_create_order') }}" class="btn flowra-btn-sm">
+                                Open Module
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

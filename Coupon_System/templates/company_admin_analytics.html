@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}Company Analytics{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <!-- NAVBAR -->
+    <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- MAIN LAYOUT -->
+    <div class="container-fluid py-4 px-4">
+        <div class="row g-4">
+
+            <!-- COMMON SIDEBAR -->
+            <div class="col-lg-3 col-xl-2">
+                <div class="dashboard-sidebar">
+                    <div class="sidebar-brand">
+                        <h5>{{ session['company_name'] }}</h5>
+                        <p>Admin Control Panel</p>
+                    </div>
+
+                    <div class="sidebar-menu">
+                        <a href="{{ url_for('admin.company_admin_dashboard') }}" class="sidebar-link">
+                            <i class="fa-solid fa-house"></i>
+                            <span>Dashboard</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_employees_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-user-plus"></i>
+                            <span>Employees</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_distributors_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-truck"></i>
+                            <span>Distributors</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_retailers_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-shop"></i>
+                            <span>Retailers</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_mechanics_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-screwdriver-wrench"></i>
+                            <span>Mechanics</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_products_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-box-open"></i>
+                            <span>Products</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_banners_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-images"></i>
+                            <span>Banners</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_catalogues_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-book-open"></i>
+                            <span>Catalogues</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_analytics') }}" class="sidebar-link active">
+                            <i class="fa-solid fa-chart-line"></i>
+                            <span>Analytics</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_history') }}" class="sidebar-link">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>History</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PAGE CONTENT -->
+            <div class="col-lg-9 col-xl-10">
+                <div class="dashboard-header mb-4">
+                    <h2 class="mb-1">{{ session.get('company_name', 'Company') }} Analytics</h2>
+                    <p class="mb-0 text-muted">Track generation, scans, pending and redeemed coupon activity.</p>
+                </div>
+
+                <!-- KPI CARDS -->
+                <div class="row g-4 mb-4">
+                    <div class="col-md-6 col-lg-3">
+                        <div class="analytics-kpi-card kpi-1">
+                            <div class="kpi-icon"><i class="fa-solid fa-ticket"></i></div>
+                            <div>
+                                <h6>Total Generated Coupons</h6>
+                                <h3>{{ total_generated }}</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-lg-3">
+                        <div class="analytics-kpi-card kpi-2">
+                            <div class="kpi-icon"><i class="fa-solid fa-coins"></i></div>
+                            <div>
+                                <h6>Total Points Generated</h6>
+                                <h3>{{ total_points_generated }}</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-lg-3">
+                        <div class="analytics-kpi-card kpi-3">
+                            <div class="kpi-icon"><i class="fa-solid fa-qrcode"></i></div>
+                            <div>
+                                <h6>Total Scanned Points</h6>
+                                <h3>{{ total_scanned }}</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-lg-3">
+                        <div class="analytics-kpi-card kpi-4">
+                            <div class="kpi-icon"><i class="fa-solid fa-circle-check"></i></div>
+                            <div>
+                                <h6>Total Redeemed Points</h6>
+                                <h3>{{ total_redeemed }}</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="analytics-kpi-card wide-kpi">
+                            <div class="kpi-icon"><i class="fa-solid fa-hourglass-half"></i></div>
+                            <div>
+                                <h6>Scanned But Not Redeemed Coupons</h6>
+                                <h3>{{ scanned_not_redeemed }}</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="analytics-kpi-card wide-kpi">
+                            <div class="kpi-icon"><i class="fa-solid fa-wallet"></i></div>
+                            <div>
+                                <h6>Pending Points</h6>
+                                <h3>{{ points_scanned_not_redeemed }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GENERATED BY EMPLOYEE -->
+                <div class="company-table-card mb-4">
+                    <h4 class="mb-3">Generated by Employee</h4>
+                    <div class="table-responsive">
+                        <table class="table company-table">
+                            <thead>
+                                <tr>
+                                    <th>Generated By</th>
+                                    <th>Generated Coupons</th>
+                                    <th>Generated Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in generated_by_user %}
+                                <tr>
+                                    <td>{{ row[0] or 'Unknown' }}</td>
+                                    <td>{{ row[1] }}</td>
+                                    <td>{{ row[2] }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">No data found.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SCANNED BY USER -->
+                <div class="company-table-card mb-4">
+                    <h4 class="mb-3">Scanned by User</h4>
+                    <div class="table-responsive">
+                        <table class="table company-table">
+                            <thead>
+                                <tr>
+                                    <th>Scanned By</th>
+                                    <th>Scanned Coupons</th>
+                                    <th>Scanned Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in scanned_by_user %}
+                                <tr>
+                                    <td>{{ row[0] or 'Unknown' }}</td>
+                                    <td>{{ row[1] }}</td>
+                                    <td>{{ row[2] }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">No data found.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- PENDING -->
+                <div class="company-table-card">
+                    <h4 class="mb-3">Pending Coupons</h4>
+                    <div class="table-responsive">
+                        <table class="table company-table">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Pending Coupons</th>
+                                    <th>Pending Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Scanned but Not Redeemed</td>
+                                    <td>{{ scanned_not_redeemed }}</td>
+                                    <td>{{ points_scanned_not_redeemed }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

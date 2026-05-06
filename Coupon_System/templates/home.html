@@ -1,0 +1,2032 @@
+{% extends "base.html" %}
+{% block title %}FLOWRA Home{% endblock %}
+
+{% block content %}
+<style>
+    :root {
+        --blue: #2563eb;
+        --blue-dark: #1d4ed8;
+        --purple: #7c3aed;
+        --cyan: #06b6d4;
+        --dark: #030712;
+        --text: #111827;
+        --muted: #6b7280;
+        --glass: rgba(255,255,255,0.78);
+        --border: rgba(255,255,255,0.45);
+    }
+
+    html {
+        scroll-behavior: smooth;
+    }
+
+    .flowra-home {
+        position: relative;
+        min-height: 100vh;
+        color: var(--text);
+        overflow-x: hidden;
+        background:
+            radial-gradient(circle at 10% 10%, rgba(37,99,235,0.35), transparent 30%),
+            radial-gradient(circle at 90% 20%, rgba(124,58,237,0.28), transparent 28%),
+            radial-gradient(circle at 50% 90%, rgba(6,182,212,0.22), transparent 32%),
+            linear-gradient(135deg, #eef5ff 0%, #f8fbff 45%, #f4f1ff 100%);
+    }
+
+    #liveBgCanvas {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+        pointer-events: none;
+    }
+
+    .cursor-glow {
+        position: fixed;
+        width: 360px;
+        height: 360px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(37,99,235,0.18), transparent 68%);
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 1;
+        opacity: 0.9;
+        mix-blend-mode: multiply;
+    }
+
+    .flowra-home > nav,
+    .flowra-home > section,
+    .flowra-home > footer {
+        position: relative;
+        z-index: 2;
+    }
+
+    .floating-blob {
+        position: fixed;
+        border-radius: 999px;
+        filter: blur(36px);
+        opacity: 0.45;
+        z-index: 0;
+        animation: blobFloat 12s ease-in-out infinite alternate;
+        pointer-events: none;
+    }
+
+    .blob-1 {
+        width: 280px;
+        height: 280px;
+        background: #2563eb;
+        top: 12%;
+        left: -80px;
+    }
+
+    .blob-2 {
+        width: 330px;
+        height: 330px;
+        background: #7c3aed;
+        top: 38%;
+        right: -130px;
+        animation-delay: 2s;
+    }
+
+    .blob-3 {
+        width: 240px;
+        height: 240px;
+        background: #06b6d4;
+        bottom: 10%;
+        left: 30%;
+        animation-delay: 4s;
+    }
+
+    @keyframes blobFloat {
+        from {
+            transform: translateY(0) scale(1);
+        }
+        to {
+            transform: translateY(-45px) scale(1.08);
+        }
+    }
+
+    .flowra-navbar {
+        background: rgba(255,255,255,0.72);
+        backdrop-filter: blur(18px);
+        border-bottom: 1px solid rgba(255,255,255,0.55);
+        padding: 14px 0;
+        position: sticky;
+        top: 0;
+        z-index: 50 !important;
+        box-shadow: 0 12px 30px rgba(15,23,42,0.06);
+    }
+
+    .flowra-navbar .navbar-brand {
+        font-weight: 900;
+        font-size: 1.8rem;
+        color: var(--text);
+        letter-spacing: -0.5px;
+    }
+
+    .flowra-navbar .nav-logo {
+        width: 38px;
+        height: 38px;
+        object-fit: cover;
+        border-radius: 12px;
+        box-shadow: 0 10px 20px rgba(37,99,235,0.25);
+    }
+
+    .flowra-navbar .nav-link {
+        color: #4b5563 !important;
+        font-weight: 700;
+        margin: 0 7px;
+        transition: 0.25s ease;
+        position: relative;
+    }
+
+    .flowra-navbar .nav-link::after {
+        content: "";
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        bottom: 2px;
+        height: 2px;
+        background: linear-gradient(90deg, var(--blue), var(--purple));
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: 0.25s ease;
+        border-radius: 99px;
+    }
+
+    .flowra-navbar .nav-link:hover {
+        color: var(--blue) !important;
+    }
+
+    .flowra-navbar .nav-link:hover::after {
+        transform: scaleX(1);
+    }
+
+    .flowra-login-btn,
+    .flowra-start-btn,
+    .hero-primary-btn,
+    .hero-secondary-btn,
+    .pricing-btn-dark,
+    .pricing-btn-blue,
+    .cta-white-btn {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .flowra-login-btn::before,
+    .flowra-start-btn::before,
+    .hero-primary-btn::before,
+    .hero-secondary-btn::before,
+    .pricing-btn-dark::before,
+    .pricing-btn-blue::before,
+    .cta-white-btn::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -80%;
+        width: 55%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+        transform: skewX(-18deg);
+        transition: 0.55s ease;
+    }
+
+    .flowra-login-btn:hover::before,
+    .flowra-start-btn:hover::before,
+    .hero-primary-btn:hover::before,
+    .hero-secondary-btn:hover::before,
+    .pricing-btn-dark:hover::before,
+    .pricing-btn-blue:hover::before,
+    .cta-white-btn:hover::before {
+        left: 130%;
+    }
+
+    .flowra-login-btn {
+        border: 1.5px solid rgba(17,24,39,0.18);
+        background: rgba(255,255,255,0.85);
+        color: var(--text);
+        font-weight: 800;
+        padding: 10px 22px;
+        border-radius: 14px;
+        transition: 0.3s ease;
+    }
+
+    .flowra-login-btn:hover {
+        background: var(--text);
+        color: #fff;
+        transform: translateY(-2px);
+    }
+
+    .flowra-start-btn {
+        background: linear-gradient(135deg, var(--blue), var(--purple));
+        color: #fff;
+        font-weight: 800;
+        padding: 11px 24px;
+        border-radius: 14px;
+        border: none;
+        transition: 0.3s ease;
+        box-shadow: 0 12px 26px rgba(37,99,235,0.25);
+    }
+
+    .flowra-start-btn:hover {
+        color: #fff;
+        transform: translateY(-2px);
+        box-shadow: 0 18px 34px rgba(37,99,235,0.35);
+    }
+
+    .hero-wrap {
+        padding: 82px 0 62px;
+    }
+
+    .hero-badge,
+    .security-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--blue-dark);
+        font-weight: 900;
+        font-size: 0.82rem;
+        letter-spacing: 2.4px;
+        text-transform: uppercase;
+        margin-bottom: 24px;
+        background: rgba(255,255,255,0.7);
+        border: 1px solid rgba(37,99,235,0.14);
+        padding: 9px 14px;
+        border-radius: 999px;
+        backdrop-filter: blur(10px);
+    }
+
+    .hero-badge::before,
+    .security-badge::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        background: #22c55e;
+        border-radius: 50%;
+        box-shadow: 0 0 0 6px rgba(34,197,94,0.12);
+    }
+
+    .hero-title {
+        font-size: clamp(2.7rem, 6vw, 5.6rem);
+        line-height: 0.98;
+        font-weight: 950;
+        letter-spacing: -3px;
+        color: #070b16;
+        margin-bottom: 24px;
+        max-width: 740px;
+    }
+
+    .hero-title .highlight {
+        background: linear-gradient(135deg, var(--blue), var(--purple), var(--cyan));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+
+    .hero-subtitle {
+        font-size: 1.15rem;
+        line-height: 1.85;
+        color: #4b5563;
+        max-width: 660px;
+        margin-bottom: 32px;
+    }
+
+    .hero-btn-group {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 30px;
+    }
+
+    .hero-primary-btn {
+        background: linear-gradient(135deg, var(--blue), var(--purple));
+        color: #fff;
+        border: none;
+        padding: 15px 28px;
+        border-radius: 16px;
+        font-weight: 900;
+        font-size: 1.03rem;
+        transition: 0.3s ease;
+        box-shadow: 0 16px 34px rgba(37,99,235,0.26);
+        text-decoration: none;
+    }
+
+    .hero-primary-btn:hover {
+        color: #fff;
+        transform: translateY(-3px);
+        box-shadow: 0 20px 42px rgba(37,99,235,0.36);
+    }
+
+    .hero-secondary-btn {
+        background: rgba(255,255,255,0.78);
+        color: var(--text);
+        border: 1.5px solid rgba(17,24,39,0.12);
+        padding: 15px 28px;
+        border-radius: 16px;
+        font-weight: 900;
+        font-size: 1.03rem;
+        transition: 0.3s ease;
+        text-decoration: none;
+        backdrop-filter: blur(12px);
+    }
+
+    .hero-secondary-btn:hover {
+        border-color: var(--blue);
+        color: var(--blue);
+        transform: translateY(-3px);
+    }
+
+    .trust-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-top: 6px;
+    }
+
+    .trust-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #4b5563;
+        font-weight: 750;
+        font-size: 0.96rem;
+        background: rgba(255,255,255,0.62);
+        border: 1px solid rgba(255,255,255,0.72);
+        padding: 9px 13px;
+        border-radius: 999px;
+        backdrop-filter: blur(12px);
+    }
+
+    .trust-item.green i { color: #22c55e; }
+    .trust-item.blue i { color: var(--blue); }
+    .trust-item.orange i { color: #f59e0b; }
+
+    .dashboard-shell {
+        background: rgba(255,255,255,0.72);
+        border: 1px solid rgba(255,255,255,0.72);
+        border-radius: 26px;
+        overflow: hidden;
+        box-shadow:
+            0 30px 70px rgba(15,23,42,0.16),
+            inset 0 1px 0 rgba(255,255,255,0.8);
+        max-width: 650px;
+        margin-left: auto;
+        backdrop-filter: blur(18px);
+        animation: dashboardFloat 5.5s ease-in-out infinite;
+    }
+
+    @keyframes dashboardFloat {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-14px); }
+    }
+
+    .dashboard-topbar {
+        background: rgba(3,7,18,0.92);
+        color: #fff;
+        padding: 13px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .dashboard-dots {
+        display: flex;
+        gap: 8px;
+    }
+
+    .dashboard-dots span {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    .dot-red { background: #ff6b6b; }
+    .dot-yellow { background: #facc15; }
+    .dot-green { background: #4ade80; }
+
+    .dashboard-url {
+        font-size: 0.84rem;
+        color: #d1d5db;
+        font-family: monospace;
+    }
+
+    .dashboard-body {
+        display: grid;
+        grid-template-columns: 155px 1fr;
+        min-height: 350px;
+    }
+
+    .dashboard-sidebar {
+        background: rgba(248,250,252,0.82);
+        border-right: 1px solid rgba(226,232,240,0.9);
+        padding: 14px 11px;
+    }
+
+    .sidebar-item {
+        padding: 10px 12px;
+        border-radius: 11px;
+        font-size: 0.92rem;
+        font-weight: 800;
+        color: #64748b;
+        margin-bottom: 7px;
+    }
+
+    .sidebar-item.active {
+        background: linear-gradient(135deg, var(--blue), var(--purple));
+        color: #fff;
+        box-shadow: 0 10px 20px rgba(37,99,235,0.25);
+    }
+
+    .dashboard-content {
+        padding: 18px;
+        background: rgba(255,255,255,0.74);
+    }
+
+    .dashboard-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        gap: 12px;
+    }
+
+    .dashboard-head h5 {
+        margin: 0;
+        font-weight: 900;
+        color: #111827;
+    }
+
+    .fy-badge {
+        font-size: 0.78rem;
+        color: #64748b;
+        border: 1px solid rgba(226,232,240,0.95);
+        padding: 5px 10px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.75);
+    }
+
+    .overview-cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+
+    .overview-card {
+        border: 1px solid rgba(226,232,240,0.9);
+        border-radius: 16px;
+        padding: 14px 12px;
+        background: rgba(255,255,255,0.8);
+        transition: 0.3s ease;
+    }
+
+    .overview-card:hover {
+        transform: translateY(-4px);
+    }
+
+    .overview-card h6 {
+        margin: 0 0 7px;
+        font-size: 0.75rem;
+        color: #94a3b8;
+        font-weight: 900;
+    }
+
+    .overview-card h4 {
+        margin: 0;
+        font-size: 1.45rem;
+        font-weight: 950;
+    }
+
+    .value-blue { color: var(--blue); }
+    .value-purple { color: var(--purple); }
+    .value-red { color: #dc2626; }
+
+    .recent-sales-box {
+        border: 1px solid rgba(226,232,240,0.9);
+        border-radius: 16px;
+        padding: 15px;
+        background: rgba(255,255,255,0.82);
+    }
+
+    .recent-sales-box h6 {
+        font-weight: 900;
+        margin-bottom: 12px;
+        color: #374151;
+    }
+
+    .sales-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        font-size: 0.93rem;
+    }
+
+    .sales-row span:last-child {
+        color: var(--blue);
+        font-weight: 900;
+    }
+
+    .mini-chart {
+        display: flex;
+        align-items: end;
+        gap: 7px;
+        height: 70px;
+        margin-top: 14px;
+        padding-top: 8px;
+    }
+
+    .mini-chart span {
+        flex: 1;
+        border-radius: 999px 999px 4px 4px;
+        background: linear-gradient(180deg, var(--blue), var(--purple));
+        opacity: 0.85;
+        animation: barPulse 2.2s ease-in-out infinite alternate;
+    }
+
+    .mini-chart span:nth-child(2) { animation-delay: 0.2s; }
+    .mini-chart span:nth-child(3) { animation-delay: 0.4s; }
+    .mini-chart span:nth-child(4) { animation-delay: 0.6s; }
+    .mini-chart span:nth-child(5) { animation-delay: 0.8s; }
+
+    @keyframes barPulse {
+        from { transform: scaleY(0.75); opacity: 0.7; }
+        to { transform: scaleY(1); opacity: 1; }
+    }
+
+    .last-sync {
+        text-align: right;
+        margin-top: 12px;
+        font-size: 0.74rem;
+        color: #94a3b8;
+    }
+
+    .features-section,
+    .pricing-section,
+    .testimonials-section {
+        padding: 85px 0;
+    }
+
+    .section-badge {
+        display: inline-block;
+        background: rgba(219,234,254,0.78);
+        color: var(--blue-dark);
+        font-weight: 900;
+        padding: 9px 17px;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        margin-bottom: 16px;
+        border: 1px solid rgba(37,99,235,0.12);
+        backdrop-filter: blur(10px);
+    }
+
+    .section-title {
+        font-size: clamp(2rem, 4vw, 2.8rem);
+        font-weight: 950;
+        color: #0f172a;
+        margin-bottom: 12px;
+        text-align: center;
+        letter-spacing: -1.5px;
+    }
+
+    .section-subtitle {
+        color: #64748b;
+        max-width: 780px;
+        margin: 0 auto 42px;
+        line-height: 1.85;
+        text-align: center;
+    }
+
+    .feature-card,
+    .pricing-card,
+    .testimonial-card {
+        background: rgba(255,255,255,0.72);
+        border: 1px solid rgba(255,255,255,0.7);
+        border-radius: 24px;
+        height: 100%;
+        transition: 0.35s ease;
+        box-shadow: 0 16px 36px rgba(15,23,42,0.07);
+        backdrop-filter: blur(18px);
+    }
+
+    .feature-card {
+        padding: 28px;
+        text-align: left;
+    }
+
+    .feature-card:hover,
+    .pricing-card:hover,
+    .testimonial-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 26px 54px rgba(15,23,42,0.12);
+    }
+
+    .feature-icon {
+        width: 62px;
+        height: 62px;
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 1.4rem;
+        margin-bottom: 18px;
+        box-shadow: 0 16px 30px rgba(37,99,235,0.2);
+    }
+
+    .gradient-1 { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
+    .gradient-2 { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+    .gradient-3 { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+    .gradient-4 { background: linear-gradient(135deg, #f59e0b, #ea580c); }
+
+    .feature-card h5 {
+        font-weight: 900;
+        margin-bottom: 10px;
+        color: #111827;
+    }
+
+    .feature-card p {
+        color: #64748b;
+        margin: 0;
+        line-height: 1.8;
+    }
+
+    .pricing-toggle-wrap {
+        display: flex;
+        justify-content: center;
+        margin: 26px 0 36px;
+    }
+
+    .pricing-toggle {
+        background: rgba(255,255,255,0.66);
+        border: 1px solid rgba(255,255,255,0.75);
+        border-radius: 16px;
+        padding: 5px;
+        display: inline-flex;
+        gap: 5px;
+        backdrop-filter: blur(14px);
+        box-shadow: 0 12px 28px rgba(15,23,42,0.06);
+    }
+
+    .pricing-toggle button {
+        padding: 10px 18px;
+        border-radius: 12px;
+        font-size: 0.9rem;
+        font-weight: 900;
+        color: #64748b;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+    }
+
+    .pricing-toggle .active {
+        background: linear-gradient(135deg, var(--blue), var(--purple));
+        color: #fff;
+        box-shadow: 0 10px 22px rgba(37,99,235,0.22);
+    }
+
+    .pricing-toggle .save-tag {
+        color: #22c55e;
+        font-size: 0.78rem;
+        font-weight: 950;
+        margin-left: 4px;
+    }
+
+    .pricing-toggle .active .save-tag {
+        color: #bbf7d0;
+    }
+
+    .pricing-card {
+        padding: 30px 24px;
+        position: relative;
+    }
+
+    .pricing-card.popular {
+        border: 2px solid rgba(37,99,235,0.75);
+        box-shadow: 0 22px 48px rgba(37,99,235,0.12);
+    }
+
+    .popular-badge {
+        position: absolute;
+        top: -14px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(135deg, var(--blue), var(--purple));
+        color: #fff;
+        font-size: 0.76rem;
+        font-weight: 950;
+        padding: 6px 15px;
+        border-radius: 999px;
+        box-shadow: 0 12px 24px rgba(37,99,235,0.25);
+    }
+
+    .pricing-card h4 {
+        font-weight: 950;
+        color: #111827;
+        margin-bottom: 6px;
+    }
+
+    .pricing-card .plan-desc {
+        color: #64748b;
+        font-size: 0.95rem;
+        min-height: 44px;
+        margin-bottom: 16px;
+    }
+
+    .price-line {
+        display: flex;
+        align-items: flex-end;
+        gap: 3px;
+        margin-bottom: 2px;
+    }
+
+    .price-line .currency {
+        font-size: 1.8rem;
+        font-weight: 950;
+        color: #111827;
+        line-height: 1;
+    }
+
+    .price-line .amount {
+        font-size: 3rem;
+        font-weight: 950;
+        color: #111827;
+        line-height: 0.95;
+        letter-spacing: -1px;
+    }
+
+    .price-line .per {
+        color: #64748b;
+        font-weight: 700;
+        margin-bottom: 6px;
+    }
+
+    .billed-line {
+        color: #16a34a;
+        font-size: 0.85rem;
+        margin-bottom: 18px;
+        font-weight: 700;
+    }
+
+    .pricing-btn-dark,
+    .pricing-btn-blue {
+        width: 100%;
+        padding: 14px 18px;
+        border-radius: 14px;
+        font-weight: 900;
+        font-size: 1rem;
+        border: none;
+        margin-bottom: 20px;
+        transition: 0.3s ease;
+        text-decoration: none;
+        display: inline-block;
+        text-align: center;
+    }
+
+    .pricing-btn-dark {
+        background: #05070d;
+        color: #fff;
+    }
+
+    .pricing-btn-blue {
+        background: linear-gradient(135deg, var(--blue), var(--purple));
+        color: #fff;
+        box-shadow: 0 14px 28px rgba(37,99,235,0.24);
+    }
+
+    .pricing-btn-dark:hover,
+    .pricing-btn-blue:hover {
+        transform: translateY(-3px);
+        color: #fff;
+    }
+
+    .pricing-features {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .pricing-features li {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        color: #475569;
+        margin-bottom: 12px;
+        line-height: 1.55;
+        font-size: 0.95rem;
+    }
+
+    .pricing-features i {
+        color: #16a34a;
+        margin-top: 4px;
+        font-size: 0.85rem;
+    }
+
+    .pricing-foot {
+        color: #94a3b8;
+        font-size: 0.84rem;
+        margin-top: 18px;
+        font-weight: 700;
+    }
+
+    .security-section {
+        background:
+            radial-gradient(circle at 20% 20%, rgba(37,99,235,0.25), transparent 30%),
+            radial-gradient(circle at 85% 65%, rgba(124,58,237,0.2), transparent 32%),
+            #030712;
+        padding: 95px 0;
+        color: #ffffff;
+        overflow: hidden;
+    }
+
+    .security-title {
+        font-size: clamp(2.3rem, 4vw, 4rem);
+        line-height: 1.08;
+        font-weight: 950;
+        margin-bottom: 24px;
+        color: #ffffff;
+        letter-spacing: -1.5px;
+    }
+
+    .security-subtitle {
+        font-size: 1.1rem;
+        line-height: 1.85;
+        color: #cbd5e1;
+        max-width: 650px;
+        margin-bottom: 32px;
+    }
+
+    .security-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 18px;
+    }
+
+    .security-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        color: #f8fafc;
+        font-size: 1rem;
+        line-height: 1.7;
+    }
+
+    .security-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        background: rgba(37,99,235,0.18);
+        color: #60a5fa;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        margin-top: 2px;
+        border: 1px solid rgba(96,165,250,0.22);
+    }
+
+    .security-visual {
+        min-height: 550px;
+        position: relative;
+        border-radius: 30px;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at center, rgba(96,165,250,0.25), transparent 40%),
+            linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04));
+        border: 1px solid rgba(255,255,255,0.12);
+        box-shadow: inset 0 0 80px rgba(255,255,255,0.05), 0 28px 60px rgba(0,0,0,0.35);
+        backdrop-filter: blur(12px);
+    }
+
+    .security-ring {
+        position: absolute;
+        inset: 50%;
+        transform: translate(-50%, -50%);
+        width: 380px;
+        height: 380px;
+        border-radius: 50%;
+        border: 34px solid rgba(96,165,250,0.18);
+        box-shadow:
+            0 0 60px rgba(37,99,235,0.28),
+            inset 0 0 45px rgba(124,58,237,0.2);
+        animation: rotateRing 16s linear infinite;
+    }
+
+    .security-ring::before,
+    .security-ring::after {
+        content: "";
+        position: absolute;
+        inset: 38px;
+        border-radius: 50%;
+        border: 2px dashed rgba(255,255,255,0.28);
+    }
+
+    .security-ring::after {
+        inset: 95px;
+        border-style: solid;
+        border-color: rgba(96,165,250,0.3);
+    }
+
+    @keyframes rotateRing {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+
+    .security-core {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 118px;
+        height: 118px;
+        border-radius: 30px;
+        background: linear-gradient(135deg, var(--blue), var(--purple));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 2.7rem;
+        box-shadow: 0 0 60px rgba(37,99,235,0.45);
+        z-index: 2;
+    }
+
+    .security-chip {
+        position: absolute;
+        background: rgba(255,255,255,0.11);
+        border: 1px solid rgba(255,255,255,0.18);
+        color: #e2e8f0;
+        padding: 12px 16px;
+        border-radius: 16px;
+        font-weight: 850;
+        backdrop-filter: blur(14px);
+        box-shadow: 0 18px 38px rgba(0,0,0,0.18);
+    }
+
+    .chip-1 { top: 70px; left: 60px; }
+    .chip-2 { top: 115px; right: 45px; }
+    .chip-3 { bottom: 92px; left: 65px; }
+    .chip-4 { bottom: 70px; right: 60px; }
+
+    .testimonial-card {
+        padding: 26px;
+    }
+
+    .testimonial-stars {
+        color: #fbbf24;
+        margin-bottom: 14px;
+        font-size: 0.95rem;
+        letter-spacing: 2px;
+    }
+
+    .testimonial-text {
+        color: #374151;
+        font-size: 0.97rem;
+        line-height: 1.85;
+        margin-bottom: 22px;
+        min-height: 110px;
+    }
+
+    .testimonial-user {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .testimonial-avatar {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+        color: var(--blue-dark);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 950;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .testimonial-user h6 {
+        margin: 0;
+        font-weight: 950;
+        color: #111827;
+        font-size: 0.98rem;
+    }
+
+    .testimonial-user p {
+        margin: 2px 0 0;
+        color: #64748b;
+        font-size: 0.88rem;
+    }
+
+    .cta-section {
+        padding: 0;
+    }
+
+    .cta-card {
+        background:
+            radial-gradient(circle at 20% 20%, rgba(255,255,255,0.2), transparent 22%),
+            linear-gradient(135deg, #1453f3, #7c3aed);
+        padding: 72px 24px;
+        color: #fff;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .cta-card::before {
+        content: "";
+        position: absolute;
+        width: 300px;
+        height: 300px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.12);
+        right: -90px;
+        top: -130px;
+    }
+
+    .cta-card h2 {
+        position: relative;
+        font-size: clamp(2rem, 4vw, 2.9rem);
+        font-weight: 950;
+        margin-bottom: 14px;
+        letter-spacing: -1px;
+    }
+
+    .cta-card p {
+        position: relative;
+        max-width: 760px;
+        margin: 0 auto;
+        color: #dbeafe;
+        line-height: 1.8;
+        text-align: center;
+    }
+
+    .cta-white-btn {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background: #fff;
+        color: #1453f3;
+        font-weight: 950;
+        padding: 15px 32px;
+        border-radius: 15px;
+        text-decoration: none;
+        margin-top: 30px;
+        transition: 0.3s ease;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.16);
+    }
+
+    .cta-white-btn:hover {
+        transform: translateY(-3px);
+        color: #1453f3;
+    }
+
+    .flowra-footer {
+        background: #030712;
+        color: #e5e7eb;
+        padding: 0 0 28px;
+    }
+
+    .footer-top-line {
+        height: 5px;
+        background: linear-gradient(90deg, var(--blue), var(--purple), var(--cyan));
+        width: 100%;
+    }
+
+    .footer-brand-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 18px;
+    }
+
+    .footer-logo {
+        width: 30px;
+        height: 30px;
+        object-fit: cover;
+        border-radius: 8px;
+    }
+
+    .footer-brand-name {
+        font-size: 1.4rem;
+        font-weight: 950;
+        color: #ffffff;
+    }
+
+    .footer-desc,
+    .footer-subdesc,
+    .footer-owned {
+        color: #cbd5e1;
+        font-size: 0.95rem;
+        line-height: 1.7;
+        margin-bottom: 8px;
+    }
+
+    .footer-owned strong {
+        color: #ffffff;
+    }
+
+    .footer-title {
+        color: #ffffff;
+        font-size: 1rem;
+        font-weight: 950;
+        margin-bottom: 16px;
+    }
+
+    .footer-links {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .footer-links li {
+        margin-bottom: 10px;
+    }
+
+    .footer-links a {
+        color: #cbd5e1;
+        text-decoration: none;
+        transition: 0.25s ease;
+        font-size: 0.95rem;
+    }
+
+    .footer-links a:hover {
+        color: #ffffff;
+        padding-left: 4px;
+    }
+
+    .footer-contact-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #cbd5e1;
+        margin-bottom: 12px;
+        font-size: 0.95rem;
+    }
+
+    .footer-contact-item i {
+        color: #9ca3af;
+        width: 16px;
+    }
+
+    .footer-divider {
+        border-top: 1px solid rgba(255,255,255,0.12);
+        margin: 28px 0 22px;
+    }
+
+    .footer-bottom {
+        text-align: center;
+    }
+
+    .footer-copyright {
+        color: #9ca3af;
+        font-size: 0.9rem;
+        margin-bottom: 14px;
+    }
+
+    .footer-note {
+        color: #6b7280;
+        font-size: 0.74rem;
+        line-height: 1.8;
+        max-width: 980px;
+        margin: 0 auto;
+    }
+
+    .reveal-up {
+        opacity: 0;
+        transform: translateY(24px);
+        transition: 0.7s ease;
+    }
+
+    .reveal-up.show {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    @media (max-width: 991px) {
+        .hero-wrap {
+            padding-top: 52px;
+        }
+
+        .dashboard-shell {
+            margin: 44px auto 0;
+        }
+
+        .navbar-collapse {
+            margin-top: 16px;
+            background: rgba(255,255,255,0.88);
+            border: 1px solid rgba(255,255,255,0.75);
+            border-radius: 20px;
+            padding: 16px;
+            backdrop-filter: blur(18px);
+        }
+
+        .flowra-navbar .nav-link {
+            margin: 4px 0;
+        }
+
+        .hero-title {
+            letter-spacing: -1.6px;
+        }
+
+        .footer-col {
+            margin-bottom: 28px;
+        }
+
+        .security-visual {
+            min-height: 430px;
+            margin-top: 40px;
+        }
+
+        .security-ring {
+            width: 285px;
+            height: 285px;
+        }
+
+        .security-chip {
+            font-size: 0.82rem;
+            padding: 10px 12px;
+        }
+    }
+
+    @media (max-width: 767px) {
+        .cursor-glow,
+        .floating-blob {
+            display: none;
+        }
+
+        .hero-wrap {
+            padding: 38px 0 48px;
+        }
+
+        .hero-title {
+            font-size: 2.65rem;
+            line-height: 1.05;
+            letter-spacing: -1.2px;
+        }
+
+        .hero-subtitle {
+            font-size: 1rem;
+            line-height: 1.75;
+        }
+
+        .hero-primary-btn,
+        .hero-secondary-btn {
+            width: 100%;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .trust-row {
+            gap: 10px;
+        }
+
+        .trust-item {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .dashboard-body {
+            grid-template-columns: 1fr;
+        }
+
+        .dashboard-sidebar {
+            border-right: none;
+            border-bottom: 1px solid rgba(226,232,240,0.9);
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .sidebar-item {
+            margin-bottom: 0;
+            text-align: center;
+            font-size: 0.86rem;
+        }
+
+        .overview-cards {
+            grid-template-columns: 1fr;
+        }
+
+        .dashboard-url {
+            font-size: 0.72rem;
+        }
+
+        .features-section,
+        .pricing-section,
+        .testimonials-section,
+        .security-section {
+            padding: 64px 0;
+        }
+
+        .testimonial-text {
+            min-height: auto;
+        }
+
+        .footer-brand-name {
+            font-size: 1.2rem;
+        }
+
+        .security-list li {
+            font-size: 0.95rem;
+        }
+
+        .security-visual {
+            min-height: 340px;
+        }
+
+        .security-ring {
+            width: 220px;
+            height: 220px;
+            border-width: 24px;
+        }
+
+        .security-core {
+            width: 88px;
+            height: 88px;
+            border-radius: 22px;
+            font-size: 2rem;
+        }
+
+        .chip-1 { top: 28px; left: 22px; }
+        .chip-2 { top: 72px; right: 20px; }
+        .chip-3 { bottom: 72px; left: 18px; }
+        .chip-4 { bottom: 28px; right: 20px; }
+
+        .security-chip {
+            font-size: 0.72rem;
+            padding: 8px 10px;
+        }
+    }
+
+    @media (max-width: 420px) {
+        .hero-title {
+            font-size: 2.25rem;
+        }
+
+        .dashboard-shell {
+            border-radius: 20px;
+        }
+
+        .dashboard-content {
+            padding: 14px;
+        }
+
+        .price-line .amount {
+            font-size: 2.55rem;
+        }
+
+        .flowra-navbar .d-flex {
+            flex-direction: column;
+            align-items: stretch !important;
+        }
+
+        .flowra-login-btn,
+        .flowra-start-btn {
+            width: 100%;
+        }
+    }
+</style>
+
+<div class="flowra-home">
+    <canvas id="liveBgCanvas"></canvas>
+    <div class="cursor-glow" id="cursorGlow"></div>
+    <div class="floating-blob blob-1"></div>
+    <div class="floating-blob blob-2"></div>
+    <div class="floating-blob blob-3"></div>
+
+    <nav class="navbar navbar-expand-lg flowra-navbar">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('auth.pricing') }}">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="nav-logo">
+                <span>FLOWRA</span>
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#flowraNav" aria-controls="flowraNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="flowraNav">
+                <ul class="navbar-nav mx-auto align-items-lg-center">
+                    <li class="nav-item"><a class="nav-link" href="#features">Features</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#pricing">Pricing</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#testimonials">Testimonials</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#security">Security</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#resources">Resources</a></li>
+                </ul>
+
+                <div class="d-flex align-items-center gap-3">
+                    <a href="{{ url_for('auth.login') }}" class="btn flowra-login-btn">Login</a>
+                    <a href="{{ url_for('auth.register') }}" class="btn flowra-start-btn">Get Started</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero-wrap">
+        <div class="container">
+            <div class="row align-items-center g-5">
+                <div class="col-lg-6 reveal-up">
+                    <span class="hero-badge">FLOWRA BUSINESS PLATFORM</span>
+
+                    <h1 class="hero-title">
+                        Unlock the full power of your <span class="highlight">FLOWRA Data</span>
+                    </h1>
+
+                    <p class="hero-subtitle">
+                        Real-time task insights, loyalty tracking, coupon operations, CRM-style visibility,
+                        and AI-powered business intelligence — all in one smart platform built for growing businesses.
+                    </p>
+
+                    <div class="hero-btn-group">
+                        {% if session.get('user_id') and session.get('user_role') == 'user' %}
+                            <form method="POST" action="{{ url_for('auth.start_free_trial') }}" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn hero-primary-btn">
+                                    Start Free Trial <i class="fa-solid fa-arrow-right ms-2"></i>
+                                </button>
+                            </form>
+                        {% elif session.get('user_id') and session.get('user_role') == 'admin' %}
+                            <a href="{{ url_for('admin.company_admin_dashboard') }}" class="btn hero-primary-btn">
+                                Go to Dashboard <i class="fa-solid fa-arrow-right ms-2"></i>
+                            </a>
+                        {% else %}
+                            <a href="{{ url_for('auth.register') }}" class="btn hero-primary-btn">
+                                Start Free Trial <i class="fa-solid fa-arrow-right ms-2"></i>
+                            </a>
+                        {% endif %}
+
+                        <a href="#pricing" class="btn hero-secondary-btn">
+                            See Pricing
+                        </a>
+                    </div>
+
+                    <div class="trust-row">
+                        <div class="trust-item green">
+                            <i class="fa-solid fa-shield-halved"></i>
+                            <span>256-bit Encryption</span>
+                        </div>
+                        <div class="trust-item blue">
+                            <i class="fa-regular fa-clock"></i>
+                            <span>2-min Setup</span>
+                        </div>
+                        <div class="trust-item orange">
+                            <i class="fa-solid fa-bolt"></i>
+                            <span>Fast Deployment</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6 reveal-up">
+                    <div class="dashboard-shell">
+                        <div class="dashboard-topbar">
+                            <div class="dashboard-dots">
+                                <span class="dot-red"></span>
+                                <span class="dot-yellow"></span>
+                                <span class="dot-green"></span>
+                            </div>
+                            <div class="dashboard-url">flowra.in/dashboard</div>
+                            <div style="width:54px;"></div>
+                        </div>
+
+                        <div class="dashboard-body">
+                            <div class="dashboard-sidebar">
+                                <div class="sidebar-item active">Dashboard</div>
+                                <div class="sidebar-item">Tasks</div>
+                                <div class="sidebar-item">Loyalty</div>
+                                <div class="sidebar-item">Analytics</div>
+                                <div class="sidebar-item">AI Reports</div>
+                            </div>
+
+                            <div class="dashboard-content">
+                                <div class="dashboard-head">
+                                    <h5>Business Overview</h5>
+                                    <span class="fy-badge">FY 2025-26</span>
+                                </div>
+
+                                <div class="overview-cards">
+                                    <div class="overview-card">
+                                        <h6>Total Revenue</h6>
+                                        <h4 class="value-blue">₹52.3L</h4>
+                                    </div>
+                                    <div class="overview-card">
+                                        <h6>Active Users</h6>
+                                        <h4 class="value-purple">156</h4>
+                                    </div>
+                                    <div class="overview-card">
+                                        <h6>Pending Tasks</h6>
+                                        <h4 class="value-red">23</h4>
+                                    </div>
+                                </div>
+
+                                <div class="recent-sales-box">
+                                    <h6>Recent Activity</h6>
+                                    <div class="sales-row"><span>Task approvals</span><span>+128</span></div>
+                                    <div class="sales-row"><span>Coupons scanned</span><span>+9.8K</span></div>
+                                    <div class="sales-row"><span>Rewards redeemed</span><span>+₹75K</span></div>
+                                    <div class="sales-row"><span>New signups</span><span>+3.2K</span></div>
+
+                                    <div class="mini-chart">
+                                        <span style="height:38%;"></span>
+                                        <span style="height:62%;"></span>
+                                        <span style="height:48%;"></span>
+                                        <span style="height:76%;"></span>
+                                        <span style="height:92%;"></span>
+                                        <span style="height:58%;"></span>
+                                    </div>
+                                </div>
+
+                                <div class="last-sync">Last sync: 16/04/2026, 11:30 IST</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features-section" id="features">
+        <div class="container text-center">
+            <div class="reveal-up">
+                <span class="section-badge">Core Features</span>
+                <h2 class="section-title">Built for modern business operations</h2>
+                <p class="section-subtitle">
+                    FLOWRA helps you manage teams, loyalty systems, analytics, and workflows from a single smart dashboard.
+                </p>
+            </div>
+
+            <div class="row g-4 mt-2">
+                <div class="col-md-6 col-lg-3 reveal-up">
+                    <div class="feature-card">
+                        <div class="feature-icon gradient-1">
+                            <i class="fa-solid fa-list-check"></i>
+                        </div>
+                        <h5>Task Management</h5>
+                        <p>Assign, monitor, approve, and track tasks with full workflow visibility.</p>
+                    </div>
+                </div>
+
+                <div class="col-md-6 col-lg-3 reveal-up">
+                    <div class="feature-card">
+                        <div class="feature-icon gradient-2">
+                            <i class="fa-solid fa-gift"></i>
+                        </div>
+                        <h5>Loyalty System</h5>
+                        <p>Run coupon scanning, reward points, wallet flow, and customer engagement smoothly.</p>
+                    </div>
+                </div>
+
+                <div class="col-md-6 col-lg-3 reveal-up">
+                    <div class="feature-card">
+                        <div class="feature-icon gradient-3">
+                            <i class="fa-solid fa-chart-line"></i>
+                        </div>
+                        <h5>Live Analytics</h5>
+                        <p>See performance, growth, activity, and business insights in real time.</p>
+                    </div>
+                </div>
+
+                <div class="col-md-6 col-lg-3 reveal-up">
+                    <div class="feature-card">
+                        <div class="feature-icon gradient-4">
+                            <i class="fa-solid fa-shield-halved"></i>
+                        </div>
+                        <h5>Secure Platform</h5>
+                        <p>Built with role-based access, clean workflows, and scalable system structure.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="pricing-section" id="pricing">
+        <div class="container text-center">
+            <div class="reveal-up">
+                <span class="section-badge">Pricing Plans</span>
+                <h2 class="section-title">Simple pricing for every stage</h2>
+                <p class="section-subtitle">
+                    Choose the plan that fits your business. Start small, scale fast, and manage everything through FLOWRA.
+                </p>
+            </div>
+
+            <div class="pricing-toggle-wrap reveal-up">
+                <div class="pricing-toggle">
+                    <button type="button" id="monthlyBtn">Monthly</button>
+                    <button type="button" id="yearlyBtn" class="active">Annual <span class="save-tag">Save 17%</span></button>
+                </div>
+            </div>
+
+            <div class="row g-4 justify-content-center">
+                <div class="col-md-6 col-lg-4 reveal-up">
+                    <div class="pricing-card text-start">
+                        <h4>Starter</h4>
+                        <p class="plan-desc">Perfect for small businesses getting started.</p>
+                        <div class="price-line">
+                            <span class="currency">₹</span>
+                            <span class="amount" id="starterAmount">833</span>
+                            <span class="per" id="starterPer">/month</span>
+                        </div>
+                        <div class="billed-line" id="starterBill">Billed ₹9,990/year</div>
+
+                        <a id="starterBtn" href="{{ url_for('auth.subscription') }}?plan=starter&cycle=yearly" class="pricing-btn-dark">
+                            Get Started
+                        </a>
+
+                        <ul class="pricing-features">
+                            <li><i class="fa-solid fa-check"></i><span>Dashboard & Overview</span></li>
+                            <li><i class="fa-solid fa-check"></i><span>Task & workflow tracking</span></li>
+                            <li><i class="fa-solid fa-check"></i><span>Coupon and loyalty basics</span></li>
+                            <li><i class="fa-solid fa-check"></i><span>Setup & configuration</span></li>
+                        </ul>
+
+                        <div class="pricing-foot">Up to 1 company, 2 employees</div>
+                    </div>
+                </div>
+
+                <div class="col-md-6 col-lg-4 reveal-up">
+                    <div class="pricing-card popular text-start">
+                        <div class="popular-badge">Most Popular</div>
+                        <h4>Professional</h4>
+                        <p class="plan-desc">For growing businesses needing deeper insights.</p>
+                        <div class="price-line">
+                            <span class="currency">₹</span>
+                            <span class="amount" id="proAmount">2083</span>
+                            <span class="per" id="proPer">/month</span>
+                        </div>
+                        <div class="billed-line" id="proBill">Billed ₹24,990/year</div>
+
+                        <a id="proBtn" href="{{ url_for('auth.subscription') }}?plan=professional&cycle=yearly" class="pricing-btn-blue">
+                            Get Started
+                        </a>
+
+                        <ul class="pricing-features">
+                            <li><i class="fa-solid fa-check"></i><span>Everything in Starter</span></li>
+                            <li><i class="fa-solid fa-check"></i><span>Customer CRM & outstanding view</span></li>
+                            <li><i class="fa-solid fa-check"></i><span>Inventory and movement analytics</span></li>
+                            <li><i class="fa-solid fa-check"></i><span>Multi-company support</span></li>
+                            <li><i class="fa-solid fa-check"></i><span>Excel & PDF exports</span></li>
+                        </ul>
+
+                        <div class="pricing-foot">Up to 3 companies, 5 employees</div>
+                    </div>
+                </div>
+
+                <div class="col-md-6 col-lg-4 reveal-up">
+                    <div class="pricing-card text-start">
+                        <h4>Enterprise</h4>
+                        <p class="plan-desc">Full suite with advanced controls and premium support.</p>
+                        <div class="price-line">
+                            <span class="currency">₹</span>
+                            <span class="amount" id="enterpriseAmount">3166</span>
+                            <span class="per" id="enterprisePer">/month</span>
+                        </div>
+                        <div class="billed-line" id="enterpriseBill">Billed ₹37,990/year</div>
+
+                        <a id="enterpriseBtn" href="{{ url_for('auth.subscription') }}?plan=enterprise&cycle=yearly" class="pricing-btn-dark">
+                            Get Started
+                        </a>
+
+                        <ul class="pricing-features">
+                            <li><i class="fa-solid fa-check"></i><span>Everything in Professional</span></li>
+                            <li><i class="fa-solid fa-check"></i><span>AI-powered reports</span></li>
+                            <li><i class="fa-solid fa-check"></i><span>Advanced BI analytics</span></li>
+                            <li><i class="fa-solid fa-check"></i><span>Multi-company support (10)</span></li>
+                            <li><i class="fa-solid fa-check"></i><span>Priority support & training</span></li>
+                        </ul>
+
+                        <div class="pricing-foot">Up to 10 companies, 20 employees</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="security-section" id="security">
+        <div class="container">
+            <div class="row align-items-center g-5">
+                <div class="col-lg-6 reveal-up">
+                    <span class="security-badge">Enterprise Security</span>
+                    <h2 class="security-title">Your data stays yours. Period.</h2>
+                    <p class="security-subtitle">
+                        FLOWRA is built with security-first architecture. Your business data is handled through encrypted workflows, role-based access, and hardened application controls designed for modern organizations.
+                    </p>
+
+                    <ul class="security-list">
+                        <li><span class="security-icon"><i class="fa-solid fa-lock"></i></span><span>AES-256 field-level encryption for all sensitive data</span></li>
+                        <li><span class="security-icon"><i class="fa-solid fa-database"></i></span><span>Multi-tenant isolation — your data remains invisible to others</span></li>
+                        <li><span class="security-icon"><i class="fa-solid fa-shield"></i></span><span>Strong password hashing with per-user protection layers</span></li>
+                        <li><span class="security-icon"><i class="fa-solid fa-eye"></i></span><span>Complete audit trail of important actions and workflows</span></li>
+                        <li><span class="security-icon"><i class="fa-solid fa-globe"></i></span><span>HTTPS/TLS, secure headers, and application-level security controls</span></li>
+                    </ul>
+                </div>
+
+                <div class="col-lg-6 reveal-up">
+                    <div class="security-visual">
+                        <div class="security-chip chip-1">Encrypted</div>
+                        <div class="security-chip chip-2">Role Based</div>
+                        <div class="security-chip chip-3">Audit Logs</div>
+                        <div class="security-chip chip-4">Protected</div>
+                        <div class="security-ring"></div>
+                        <div class="security-core">
+                            <i class="fa-solid fa-shield-halved"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="testimonials-section" id="testimonials">
+        <div class="container">
+            <div class="text-center reveal-up">
+                <span class="section-badge">WHAT OUR CUSTOMERS SAY</span>
+                <h2 class="section-title">Trusted by 500+ Indian businesses</h2>
+            </div>
+
+            <div class="row g-4 testimonials-grid">
+                <div class="col-md-6 col-lg-4 reveal-up">
+                    <div class="testimonial-card">
+                        <div class="testimonial-stars">★★★★★</div>
+                        <div class="testimonial-text">"FLOWRA completely transformed how we track inventory. We identified dead stock faster and improved team coordination within the first few weeks."</div>
+                        <div class="testimonial-user">
+                            <div class="testimonial-avatar">RA</div>
+                            <div><h6>Rajesh Agrawal</h6><p>Agrawal Auto Parts, Raipur</p></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6 col-lg-4 reveal-up">
+                    <div class="testimonial-card">
+                        <div class="testimonial-stars">★★★★★</div>
+                        <div class="testimonial-text">"The task approval and loyalty workflow helped us improve operational visibility. Our team now works with much better clarity and speed."</div>
+                        <div class="testimonial-user">
+                            <div class="testimonial-avatar">PS</div>
+                            <div><h6>Priya Sharma</h6><p>Sharma Trading Co., Indore</p></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6 col-lg-4 reveal-up">
+                    <div class="testimonial-card">
+                        <div class="testimonial-stars">★★★★★</div>
+                        <div class="testimonial-text">"FLOWRA reports save us hours daily. The dashboard is seamless, the data stays updated, and management decisions are now much easier."</div>
+                        <div class="testimonial-user">
+                            <div class="testimonial-avatar">VP</div>
+                            <div><h6>Vikram Patel</h6><p>National Engineering Works</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-section">
+        <div class="container-fluid px-0">
+            <div class="cta-card">
+                <h2>Ready to transform your business?</h2>
+                <p>Join 500+ businesses already using FLOWRA. Start your free trial today.</p>
+
+                {% if session.get('user_id') and session.get('user_role') == 'user' %}
+                    <form method="POST" action="{{ url_for('auth.start_free_trial') }}" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="cta-white-btn" style="border:none;">
+                            Activate Free Trial <i class="fa-solid fa-angle-right"></i>
+                        </button>
+                    </form>
+                {% elif session.get('user_id') and session.get('user_role') == 'admin' %}
+                    <a href="{{ url_for('admin.company_admin_dashboard') }}" class="cta-white-btn">
+                        Go to Dashboard <i class="fa-solid fa-angle-right"></i>
+                    </a>
+                {% else %}
+                    <a href="{{ url_for('auth.register') }}" class="cta-white-btn">
+                        Sign Up Free <i class="fa-solid fa-angle-right"></i>
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <footer class="flowra-footer" id="resources">
+        <div class="footer-top-line"></div>
+        <div class="container pt-5">
+            <div class="row">
+                <div class="col-lg-3 col-md-6 footer-col">
+                    <div class="footer-brand-wrap">
+                        <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="footer-logo">
+                        <span class="footer-brand-name">FLOWRA</span>
+                    </div>
+                    <div class="footer-desc">Organize. Automate. Accelerate.</div>
+                    <div class="footer-subdesc">Tally* analytics platform for Indian SMEs.</div>
+                    <div class="footer-owned">A product by <strong>JODIDAR INDIA</strong></div>
+                </div>
+
+                <div class="col-lg-3 col-md-6 footer-col">
+                    <h5 class="footer-title">Product</h5>
+                    <ul class="footer-links">
+                        <li><a href="#features">Features</a></li>
+                        <li><a href="#pricing">Pricing</a></li>
+                        <li><a href="#security">Security</a></li>
+                        <li><a href="#resources">Needs Assessment</a></li>
+                        <li><a href="#resources">Presentation</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-lg-3 col-md-6 footer-col">
+                    <h5 class="footer-title">Legal</h5>
+                    <ul class="footer-links">
+                        <li><a href="#">Privacy Policy</a></li>
+                        <li><a href="#">Terms of Service</a></li>
+                        <li><a href="#">Refund Policy</a></li>
+                        <li><a href="#">Contact Us</a></li>
+                        <li><a href="#">Social Media</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-lg-3 col-md-6 footer-col">
+                    <h5 class="footer-title">Contact</h5>
+                    <div class="footer-contact-item"><i class="fa-regular fa-envelope"></i><span>support@flowralive.in</span></div>
+                    <div class="footer-contact-item"><i class="fa-solid fa-phone"></i><span>+91 81204 70018</span></div>
+                    <div class="footer-contact-item"><i class="fa-brands fa-whatsapp"></i><span>WhatsApp</span></div>
+                </div>
+            </div>
+
+            <div class="footer-divider"></div>
+
+            <div class="footer-bottom">
+                <div class="footer-copyright">
+                    © 2026 JODIDAR INDIA. All rights reserved. FLOWRA is a brand owned by JODIDAR INDIA.
+                </div>
+                <div class="footer-note">
+                    Tally* is the trademark of its respective owner and is not affiliated, endorsed, connected or sponsored in any way to this website, mobile application or any of our affiliate sites. The same is used in accordance with honest practices and not used with any intention to misguide customers or take unfair advantage of the trademark's distinct character or harm the holder's reputation.
+                </div>
+            </div>
+        </div>
+    </footer>
+</div>
+
+<script>
+    const monthlyBtn = document.getElementById("monthlyBtn");
+    const yearlyBtn = document.getElementById("yearlyBtn");
+
+    const starterAmount = document.getElementById("starterAmount");
+    const starterPer = document.getElementById("starterPer");
+    const starterBill = document.getElementById("starterBill");
+    const starterBtn = document.getElementById("starterBtn");
+
+    const proAmount = document.getElementById("proAmount");
+    const proPer = document.getElementById("proPer");
+    const proBill = document.getElementById("proBill");
+    const proBtn = document.getElementById("proBtn");
+
+    const enterpriseAmount = document.getElementById("enterpriseAmount");
+    const enterprisePer = document.getElementById("enterprisePer");
+    const enterpriseBill = document.getElementById("enterpriseBill");
+    const enterpriseBtn = document.getElementById("enterpriseBtn");
+
+    function setMonthly() {
+        monthlyBtn.classList.add("active");
+        yearlyBtn.classList.remove("active");
+
+        starterAmount.textContent = "999";
+        starterPer.textContent = "/month";
+        starterBill.textContent = "Billed monthly";
+        starterBtn.href = "{{ url_for('auth.subscription') }}?plan=starter&cycle=monthly";
+
+        proAmount.textContent = "2499";
+        proPer.textContent = "/month";
+        proBill.textContent = "Billed monthly";
+        proBtn.href = "{{ url_for('auth.subscription') }}?plan=professional&cycle=monthly";
+
+        enterpriseAmount.textContent = "3799";
+        enterprisePer.textContent = "/month";
+        enterpriseBill.textContent = "Billed monthly";
+        enterpriseBtn.href = "{{ url_for('auth.subscription') }}?plan=enterprise&cycle=monthly";
+    }
+
+    function setYearly() {
+        yearlyBtn.classList.add("active");
+        monthlyBtn.classList.remove("active");
+
+        starterAmount.textContent = "833";
+        starterPer.textContent = "/month";
+        starterBill.textContent = "Billed ₹9,990/year";
+        starterBtn.href = "{{ url_for('auth.subscription') }}?plan=starter&cycle=yearly";
+
+        proAmount.textContent = "2083";
+        proPer.textContent = "/month";
+        proBill.textContent = "Billed ₹24,990/year";
+        proBtn.href = "{{ url_for('auth.subscription') }}?plan=professional&cycle=yearly";
+
+        enterpriseAmount.textContent = "3166";
+        enterprisePer.textContent = "/month";
+        enterpriseBill.textContent = "Billed ₹37,990/year";
+        enterpriseBtn.href = "{{ url_for('auth.subscription') }}?plan=enterprise&cycle=yearly";
+    }
+
+    if (monthlyBtn && yearlyBtn) {
+        monthlyBtn.addEventListener("click", setMonthly);
+        yearlyBtn.addEventListener("click", setYearly);
+        setYearly();
+    }
+
+    const cursorGlow = document.getElementById("cursorGlow");
+
+    document.addEventListener("mousemove", function(e) {
+        if (!cursorGlow) return;
+        cursorGlow.style.left = e.clientX + "px";
+        cursorGlow.style.top = e.clientY + "px";
+    });
+
+    const revealElements = document.querySelectorAll(".reveal-up");
+
+    const revealObserver = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+            if (entry.isIntersecting) {
+                entry.target.classList.add("show");
+            }
+        });
+    }, {
+        threshold: 0.12
+    });
+
+    revealElements.forEach(function(el) {
+        revealObserver.observe(el);
+    });
+
+    const canvas = document.getElementById("liveBgCanvas");
+    const ctx = canvas.getContext("2d");
+
+    let particles = [];
+    let particleCount = window.innerWidth < 768 ? 38 : 80;
+
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+
+    function createParticles() {
+        particles = [];
+
+        for (let i = 0; i < particleCount; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 2.4 + 0.8,
+                speedX: (Math.random() - 0.5) * 0.45,
+                speedY: (Math.random() - 0.5) * 0.45,
+                opacity: Math.random() * 0.45 + 0.15
+            });
+        }
+    }
+
+    function drawParticles() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        particles.forEach(function(p, index) {
+            p.x += p.speedX;
+            p.y += p.speedY;
+
+            if (p.x < 0 || p.x > canvas.width) p.speedX *= -1;
+            if (p.y < 0 || p.y > canvas.height) p.speedY *= -1;
+
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(37, 99, 235," + p.opacity + ")";
+            ctx.fill();
+
+            for (let j = index + 1; j < particles.length; j++) {
+                const p2 = particles[j];
+                const dx = p.x - p2.x;
+                const dy = p.y - p2.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < 120) {
+                    ctx.beginPath();
+                    ctx.moveTo(p.x, p.y);
+                    ctx.lineTo(p2.x, p2.y);
+                    ctx.strokeStyle = "rgba(37, 99, 235," + (0.12 * (1 - distance / 120)) + ")";
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+            }
+        });
+
+        requestAnimationFrame(drawParticles);
+    }
+
+    resizeCanvas();
+    createParticles();
+    drawParticles();
+
+    window.addEventListener("resize", function() {
+        particleCount = window.innerWidth < 768 ? 38 : 80;
+        resizeCanvas();
+        createParticles();
+    });
+</script>
+{% endblock %}

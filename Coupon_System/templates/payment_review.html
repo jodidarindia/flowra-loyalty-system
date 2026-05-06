@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}Payment Review{% endblock %}
+
+{% block content %}
+<style>
+    .review-page {
+        min-height: 100vh;
+        background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+        padding: 32px 0 60px;
+    }
+
+    .review-hero {
+        background: linear-gradient(135deg, #0f172a, #2563eb);
+        color: #fff;
+        border-radius: 24px;
+        padding: 26px;
+        margin-bottom: 24px;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+    }
+
+    .back-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255,255,255,0.12);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,0.22);
+        border-radius: 12px;
+        padding: 10px 15px;
+        text-decoration: none;
+        font-weight: 800;
+        margin-bottom: 18px;
+    }
+
+    .back-btn:hover {
+        color: #fff;
+        background: rgba(255,255,255,0.18);
+    }
+
+    .review-hero h2 {
+        font-size: 2rem;
+        font-weight: 900;
+        margin-bottom: 8px;
+    }
+
+    .review-hero p {
+        color: #dbeafe;
+        margin: 0;
+    }
+
+    .review-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 22px;
+        box-shadow: 0 12px 28px rgba(15,23,42,0.06);
+        overflow: hidden;
+    }
+
+    .table thead th {
+        background: #f8fafc;
+        color: #374151;
+        font-size: 0.82rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        white-space: nowrap;
+        padding: 16px;
+    }
+
+    .table td {
+        padding: 16px;
+        vertical-align: middle;
+        color: #374151;
+    }
+
+    .company-name {
+        font-weight: 900;
+        color: #111827;
+    }
+
+    .mini-text {
+        color: #6b7280;
+        font-size: 0.86rem;
+        line-height: 1.55;
+    }
+
+    .plan-badge {
+        display: inline-flex;
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: #dbeafe;
+        color: #1d4ed8;
+        font-weight: 900;
+        text-transform: capitalize;
+        font-size: 0.82rem;
+    }
+
+    .proof-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        background: #111827;
+        color: #fff;
+        padding: 9px 13px;
+        border-radius: 10px;
+        text-decoration: none;
+        font-weight: 800;
+        font-size: 0.85rem;
+    }
+
+    .proof-btn:hover {
+        color: #fff;
+        background: #000;
+    }
+
+    .no-proof {
+        color: #dc2626;
+        font-weight: 800;
+        font-size: 0.86rem;
+    }
+
+    .action-group {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .approve-btn,
+    .reject-btn {
+        border: none;
+        border-radius: 10px;
+        padding: 9px 13px;
+        font-weight: 900;
+        color: #fff;
+    }
+
+    .approve-btn {
+        background: #16a34a;
+    }
+
+    .reject-btn {
+        background: #dc2626;
+    }
+
+    .empty-state {
+        padding: 45px 20px;
+        text-align: center;
+        color: #6b7280;
+        font-weight: 700;
+    }
+</style>
+
+<div class="review-page">
+    <div class="container">
+        <div class="review-hero">
+            <a href="{{ url_for('auth.super_admin_dashboard') }}" class="back-btn">
+                <i class="fa-solid fa-arrow-left"></i>
+                Back to Dashboard
+            </a>
+
+            <h2>Payment Review</h2>
+            <p>Verify manual UPI payment screenshots before approving subscription enquiries.</p>
+        </div>
+
+        <div class="review-card">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Company</th>
+                            <th>Contact</th>
+                            <th>Plan</th>
+                            <th>Proof</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for e in enquiries %}
+                        <tr>
+                            <td><strong>#{{ e[0] }}</strong></td>
+
+                            <td>
+                                <div class="company-name">{{ e[1] }}</div>
+                                <div class="mini-text">Pending verification</div>
+                            </td>
+
+                            <td>
+                                <div><strong>{{ e[2] }}</strong></div>
+                                <div class="mini-text">{{ e[3] }}</div>
+                                <div class="mini-text">{{ e[4] }}</div>
+                            </td>
+
+                            <td>
+                                <span class="plan-badge">{{ e[5] }} / {{ e[6] or 'monthly' }}</span>
+                            </td>
+
+                            <td>
+                                {% if e[7] %}
+                                    <a target="_blank" class="proof-btn"
+                                       href="{{ url_for('static', filename='uploads/payment_screenshots/' ~ e[7]) }}">
+                                        <i class="fa-solid fa-eye"></i>
+                                        View Proof
+                                    </a>
+                                {% else %}
+                                    <span class="no-proof">No proof uploaded</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                <div class="action-group">
+                                    <form method="POST" action="{{ url_for('auth.approve_enquiry', enquiry_id=e[0]) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button class="approve-btn">Approve</button>
+                                    </form>
+
+                                    <form method="POST" action="{{ url_for('auth.reject_enquiry', enquiry_id=e[0]) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button class="reject-btn">Reject</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6">
+                                <div class="empty-state">
+                                    No pending payment reviews found.
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

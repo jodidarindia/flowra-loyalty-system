@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Dealer Wallets{% endblock %}
+{% block content %}
+<div class="dashboard-page">
+    <div class="container py-5">  <div class="mb-3">
+            <a href="{{ url_for('admin.general_employee_dashboard') }}" class="btn back-btn">
+                <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+        <div class="dashboard-header mb-4">
+            <h2>Dealer Wallets</h2>
+            <p>Dealer points balance overview.</p>
+        </div>
+
+        <div class="company-table-card">
+            <div class="table-responsive">
+                <table class="table align-middle company-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Dealer</th>
+                            <th>Mobile</th>
+                            <th>Total Points</th>
+                            <th>Updated At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for w in wallets %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ w[1] }}</td>
+                            <td>{{ w[2] }}</td>
+                            <td>{{ w[3] }}</td>
+                            <td>{{ w[4] or "N/A" }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center py-4 text-muted">No wallet data found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

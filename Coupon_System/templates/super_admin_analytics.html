@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}Super Admin Analytics{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('auth.super_admin_dashboard') }}">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-5">
+        <div class="mb-3">
+    <a href="{{ url_for('auth.super_admin_dashboard') }}" class="btn back-btn">
+        <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+    </a>
+</div>
+        <div class="dashboard-header mb-4">
+            <h2>Super Admin Analytics</h2>
+            <p>Track overall company performance, live platform status, and workforce distribution from one place.</p>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-md-6 col-lg-3">
+                <div class="analytics-kpi-card kpi-1">
+                    <div class="kpi-icon">
+                        <i class="fa-solid fa-building"></i>
+                    </div>
+                    <div>
+                        <h6>Total Companies</h6>
+                        <h3>{{ total_companies }}</h3>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 col-lg-3">
+                <div class="analytics-kpi-card kpi-2">
+                    <div class="kpi-icon">
+                        <i class="fa-solid fa-signal"></i>
+                    </div>
+                    <div>
+                        <h6>Active Companies</h6>
+                        <h3>{{ active_companies }}</h3>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 col-lg-3">
+                <div class="analytics-kpi-card kpi-3">
+                    <div class="kpi-icon">
+                        <i class="fa-solid fa-power-off"></i>
+                    </div>
+                    <div>
+                        <h6>Inactive Companies</h6>
+                        <h3>{{ inactive_companies }}</h3>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 col-lg-3">
+                <div class="analytics-kpi-card kpi-4">
+                    <div class="kpi-icon">
+                        <i class="fa-solid fa-user-shield"></i>
+                    </div>
+                    <div>
+                        <h6>Total Admins</h6>
+                        <h3>{{ total_admins }}</h3>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-12 col-lg-6">
+                <div class="analytics-kpi-card wide-kpi">
+                    <div class="kpi-icon">
+                        <i class="fa-solid fa-users"></i>
+                    </div>
+                    <div>
+                        <h6>Total Employees</h6>
+                        <h3>{{ total_employees }}</h3>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-12 col-lg-6">
+                <div class="analytics-note-card">
+                    <h5>Platform Status</h5>
+                    <p>
+                        Active companies are calculated from currently logged-in company users.
+                        Inactive companies have no online admin or employee session at the moment.
+                    </p>
+                    <div class="d-flex flex-wrap gap-3 mt-3">
+                        <span class="status-badge active-badge">● Active = Online</span>
+                        <span class="status-badge inactive-badge">● Inactive = Offline</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-lg-7">
+                <div class="chart-card">
+                    <div class="chart-card-header">
+                        <h4>Company & Team Overview</h4>
+                        <p>Quick comparison of companies, admins, and employees.</p>
+                    </div>
+                    <canvas id="barChart"></canvas>
+                </div>
+            </div>
+
+            <div class="col-lg-5">
+                <div class="chart-card">
+                    <div class="chart-card-header">
+                        <h4>Company Status Split</h4>
+                        <p>Live distribution of online vs offline companies.</p>
+                    </div>
+                    <canvas id="pieChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const totalCompanies = Number("{{ total_companies }}");
+    const activeCompanies = Number("{{ active_companies }}");
+    const inactiveCompanies = Number("{{ inactive_companies }}");
+    const totalAdmins = Number("{{ total_admins }}");
+    const totalEmployees = Number("{{ total_employees }}");
+
+    const barCtx = document.getElementById('barChart').getContext('2d');
+    new Chart(barCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Companies', 'Admins', 'Employees'],
+            datasets: [{
+                label: 'Count',
+                data: [totalCompanies, totalAdmins, totalEmployees],
+                backgroundColor: [
+                    'rgba(6, 20, 95, 0.9)',
+                    'rgba(31, 111, 255, 0.85)',
+                    'rgba(122, 44, 255, 0.80)'
+                ],
+                borderRadius: 12,
+                borderSkipped: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#334155', font: { weight: '600' } }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(148, 163, 184, 0.15)' },
+                    ticks: { color: '#64748b' }
+                }
+            }
+        }
+    });
+
+    const pieCtx = document.getElementById('pieChart').getContext('2d');
+    new Chart(pieCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Active Companies', 'Inactive Companies'],
+            datasets: [{
+                data: [activeCompanies, inactiveCompanies],
+                backgroundColor: [
+                    'rgba(34, 197, 94, 0.85)',
+                    'rgba(239, 68, 68, 0.80)'
+                ],
+                borderWidth: 0,
+                hoverOffset: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '68%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: '#334155',
+                        boxWidth: 14,
+                        padding: 16,
+                        font: { weight: '600' }
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

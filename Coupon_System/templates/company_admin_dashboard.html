@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% block title %}Company Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <div class="row g-4">
+            
+            <!-- Sidebar -->
+            <div class="col-lg-3 col-xl-2">
+                <div class="dashboard-sidebar">
+                    <div class="sidebar-brand">
+                        <h5>{{ session['company_name'] }}</h5>
+                        <p>Admin Control Panel</p>
+                    </div>
+
+                    <div class="sidebar-menu">
+                        <a href="{{ url_for('admin.company_admin_dashboard') }}" class="sidebar-link active">
+                            <i class="fa-solid fa-house"></i>
+                            <span>Dashboard</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_employees_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-user-plus"></i>
+                            <span>Employees</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_distributors_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-truck"></i>
+                            <span>Distributors</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_retailers_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-shop"></i>
+                            <span>Retailers</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_mechanics_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-screwdriver-wrench"></i>
+                            <span>Mechanics</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_products_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-box-open"></i>
+                            <span>Products</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_banners_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-images"></i>
+                            <span>Banners</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_catalogues_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-book-open"></i>
+                            <span>Catalogues</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_analytics') }}" class="sidebar-link">
+                            <i class="fa-solid fa-chart-line"></i>
+                            <span>Analytics</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_history') }}" class="sidebar-link">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>History</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-lg-9 col-xl-10">
+                <div class="dashboard-header mb-4">
+                    <h2>{{ session['company_name'] }} Dashboard</h2>
+                    <p>Manage employees, products, coupons and all company operations from one place.</p>
+                </div>
+
+                <!-- Stats Row -->
+                <div class="row g-4 mb-4">
+                    <div class="col-md-6 col-xl-3">
+                        <div class="stats-card">
+                            <div class="stats-icon gradient-1">
+                                <i class="fa-solid fa-users"></i>
+                            </div>
+                            <div>
+                                <h3>{{ employee_count }}</h3>
+                                <p>Total Employees</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-3">
+                        <div class="stats-card">
+                            <div class="stats-icon gradient-2">
+                                <i class="fa-solid fa-truck"></i>
+                            </div>
+                            <div>
+                                <h3>{{ distributor_count }}</h3>
+                                <p>Dealers</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-3">
+                        <div class="stats-card">
+                            <div class="stats-icon gradient-3">
+                                <i class="fa-solid fa-shop"></i>
+                            </div>
+                            <div>
+                                <h3>{{ retailer_count }}</h3>
+                                <p>Retailers</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-3">
+                        <div class="stats-card">
+                            <div class="stats-icon gradient-4">
+                                <i class="fa-solid fa-screwdriver-wrench"></i>
+                            </div>
+                            <div>
+                                <h3>{{ mechanic_count }}</h3>
+                                <p>Mechanics</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-3">
+                        <div class="stats-card">
+                            <div class="stats-icon gradient-1">
+                                <i class="fa-solid fa-box-open"></i>
+                            </div>
+                            <div>
+                                <h3>{{ product_count }}</h3>
+                                <p>Products</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-3">
+                        <div class="stats-card">
+                            <div class="stats-icon gradient-2">
+                                <i class="fa-solid fa-book-open"></i>
+                            </div>
+                            <div>
+                                <h3>{{ catalogue_count }}</h3>
+                                <p>Catalogues</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-3">
+                        <div class="stats-card">
+                            <div class="stats-icon gradient-3">
+                                <i class="fa-solid fa-qrcode"></i>
+                            </div>
+                            <div>
+                                <h3>{{ total_generated }}</h3>
+                                <p>Coupons Generated</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-3">
+                        <div class="stats-card">
+                            <div class="stats-icon gradient-4">
+                                <i class="fa-solid fa-chart-simple"></i>
+                            </div>
+                            <div>
+                                <h3>{{ total_scans }}</h3>
+                                <p>Total Scans</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Status Cards -->
+                <div class="row g-4 mb-4">
+                    <div class="col-md-6">
+                        <div class="status-summary-card redeemed-card">
+                            <div>
+                                <span class="mini-title">Redeemed Coupons</span>
+                                <h3>{{ redeemed_count }}</h3>
+                                <p>Successfully redeemed coupons in your company network.</p>
+                            </div>
+                            <i class="fa-solid fa-circle-check"></i>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="status-summary-card pending-card">
+                            <div>
+                                <span class="mini-title">Pending Coupons</span>
+                                <h3>{{ pending_count }}</h3>
+                                <p>Coupons that are unused or scanned but not redeemed yet.</p>
+                            </div>
+                            <i class="fa-solid fa-hourglass-half"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature Modules -->
+                <div class="row g-4">
+                    <div class="col-md-6 col-xl-4">
+                        <div class="dashboard-card">
+                            <div class="dashboard-icon gradient-1">
+                                <i class="fa-solid fa-user-plus"></i>
+                            </div>
+                            <h5>Manage Employees</h5>
+                            <p>Create and manage company admin, general employees and QR employees.</p>
+                            <a href="{{ url_for('admin.company_admin_employees_page') }}" class="btn flowra-btn-sm">Open Module</a>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-4">
+                        <div class="dashboard-card">
+                            <div class="dashboard-icon gradient-2">
+                                <i class="fa-solid fa-truck"></i>
+                            </div>
+                            <h5>Manage Distributors</h5>
+                            <p>Add and manage distributor accounts for coupon and sales channel operations.</p>
+                            <a href="{{ url_for('admin.company_admin_distributors_page') }}" class="btn flowra-btn-sm">Open Module</a>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-4">
+                        <div class="dashboard-card">
+                            <div class="dashboard-icon gradient-3">
+                                <i class="fa-solid fa-shop"></i>
+                            </div>
+                            <h5>Manage Retailers</h5>
+                            <p>Track and manage retailer profiles connected with your company products.</p>
+                            <a href="{{ url_for('admin.company_admin_retailers_page') }}" class="btn flowra-btn-sm">Open Module</a>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-4">
+                        <div class="dashboard-card">
+                            <div class="dashboard-icon gradient-4">
+                                <i class="fa-solid fa-screwdriver-wrench"></i>
+                            </div>
+                            <h5>Manage Mechanics</h5>
+                            <p>Add mechanics and maintain redemption-side user records properly.</p>
+                            <a href="{{ url_for('admin.company_admin_mechanics_page') }}" class="btn flowra-btn-sm">Open Module</a>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-4">
+                        <div class="dashboard-card">
+                            <div class="dashboard-icon gradient-1">
+                                <i class="fa-solid fa-box-open"></i>
+                            </div>
+                            <h5>Products</h5>
+                            <p>Manage part numbers, product names, types, pack sizes and related details.</p>
+                            <a href="{{ url_for('admin.company_admin_products_page') }}" class="btn flowra-btn-sm">Open Module</a>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-4">
+                        <div class="dashboard-card">
+                            <div class="dashboard-icon gradient-2">
+                                <i class="fa-solid fa-images"></i>
+                            </div>
+                            <h5>Banners</h5>
+                            <p>Upload and maintain banner assets for company promotions and campaigns.</p>
+                            <a href="{{ url_for('admin.company_admin_banners_page') }}" class="btn flowra-btn-sm">Open Module</a>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-4">
+                        <div class="dashboard-card">
+                            <div class="dashboard-icon gradient-3">
+                                <i class="fa-solid fa-book-open"></i>
+                            </div>
+                            <h5>Catalogues</h5>
+                            <p>Manage company catalogues and keep your product materials updated.</p>
+                            <a href="{{ url_for('admin.company_admin_catalogues_page') }}" class="btn flowra-btn-sm">Open Module</a>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-4">
+                        <div class="dashboard-card">
+                            <div class="dashboard-icon gradient-4">
+                                <i class="fa-solid fa-chart-line"></i>
+                            </div>
+                            <h5>Analytics</h5>
+                            <p>Track coupon generation, scans, pending and redeemed activity.</p>
+                            <a href="{{ url_for('admin.company_admin_analytics') }}" class="btn flowra-btn-sm">Open Module</a>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-4">
+                        <div class="dashboard-card">
+                            <div class="dashboard-icon gradient-1">
+                                <i class="fa-solid fa-clock-rotate-left"></i>
+                            </div>
+                            <h5>History</h5>
+                            <p>View coupon activity history with dates, scans and status tracking.</p>
+                            <a href="{{ url_for('admin.company_admin_history') }}" class="btn flowra-btn-sm">Open Module</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

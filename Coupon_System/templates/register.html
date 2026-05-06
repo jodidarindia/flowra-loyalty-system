@@ -1,0 +1,657 @@
+{% extends "base.html" %}
+{% block title %}Register - FLOWRA{% endblock %}
+
+{% block content %}
+<style>
+    .register-page {
+        min-height: 100vh;
+        position: relative;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at 15% 15%, rgba(37,99,235,0.45), transparent 28%),
+            radial-gradient(circle at 85% 25%, rgba(124,58,237,0.35), transparent 30%),
+            radial-gradient(circle at 50% 95%, rgba(6,182,212,0.28), transparent 30%),
+            linear-gradient(135deg, #eef5ff, #f7f2ff);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 16px;
+    }
+
+    .cursor-glow {
+        position: fixed;
+        width: 330px;
+        height: 330px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(37,99,235,0.25), transparent 70%);
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    .register-page::before,
+    .register-page::after {
+        content: "";
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(35px);
+        opacity: 0.55;
+        animation: floatBlob 8s ease-in-out infinite alternate;
+    }
+
+    .register-page::before {
+        width: 280px;
+        height: 280px;
+        background: #2563eb;
+        left: -90px;
+        top: 80px;
+    }
+
+    .register-page::after {
+        width: 340px;
+        height: 340px;
+        background: #7c3aed;
+        right: -120px;
+        bottom: 70px;
+        animation-delay: 2s;
+    }
+
+    @keyframes floatBlob {
+        from { transform: translateY(0) scale(1); }
+        to { transform: translateY(-35px) scale(1.08); }
+    }
+
+    .register-shell {
+        position: relative;
+        z-index: 2;
+        width: 100%;
+        max-width: 1120px;
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        background: rgba(255,255,255,0.78);
+        border-radius: 30px;
+        overflow: hidden;
+        box-shadow: 0 28px 70px rgba(15,23,42,0.16);
+        border: 1px solid rgba(255,255,255,0.75);
+        backdrop-filter: blur(18px);
+        animation: cardUp 0.7s ease;
+    }
+
+    @keyframes cardUp {
+        from {
+            opacity: 0;
+            transform: translateY(28px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .register-left {
+        background:
+            radial-gradient(circle at 20% 20%, rgba(255,255,255,0.20), transparent 26%),
+            linear-gradient(135deg, #2563eb 0%, #7c3aed 60%, #0f172a 100%);
+        color: #ffffff;
+        padding: 56px 48px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .register-left::before {
+        content: "";
+        position: absolute;
+        width: 280px;
+        height: 280px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.09);
+        top: -80px;
+        right: -80px;
+    }
+
+    .register-left::after {
+        content: "";
+        position: absolute;
+        width: 210px;
+        height: 210px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.07);
+        bottom: -80px;
+        left: -50px;
+    }
+
+    .brand-row,
+    .trial-badge,
+    .register-title,
+    .register-subtitle,
+    .feature-points {
+        position: relative;
+        z-index: 2;
+    }
+
+    .brand-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 34px;
+    }
+
+    .brand-row img {
+        width: 44px;
+        height: 44px;
+        object-fit: cover;
+        border-radius: 13px;
+        background: #fff;
+        padding: 2px;
+        box-shadow: 0 14px 30px rgba(0,0,0,0.18);
+    }
+
+    .brand-row span {
+        font-size: 1.6rem;
+        font-weight: 950;
+        letter-spacing: 0.4px;
+    }
+
+    .trial-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        background: rgba(255,255,255,0.14);
+        border: 1px solid rgba(255,255,255,0.22);
+        color: #ffffff;
+        padding: 12px 18px;
+        border-radius: 16px;
+        font-weight: 850;
+        margin-bottom: 28px;
+        backdrop-filter: blur(8px);
+    }
+
+    .trial-badge i {
+        color: #facc15;
+    }
+
+    .register-title {
+        font-size: clamp(2.1rem, 4vw, 3.35rem);
+        line-height: 1.08;
+        font-weight: 950;
+        margin-bottom: 18px;
+        max-width: 520px;
+        letter-spacing: -1.2px;
+    }
+
+    .register-subtitle {
+        font-size: 1.02rem;
+        line-height: 1.8;
+        color: rgba(255,255,255,0.88);
+        max-width: 520px;
+        margin-bottom: 30px;
+    }
+
+    .feature-points {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 16px;
+    }
+
+    .feature-points li {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        line-height: 1.7;
+        color: rgba(255,255,255,0.94);
+        font-size: 0.98rem;
+    }
+
+    .feature-points i {
+        margin-top: 5px;
+        color: #86efac;
+        font-size: 0.9rem;
+    }
+
+    .register-right {
+        padding: 44px 42px;
+        background: rgba(255,255,255,0.78);
+        backdrop-filter: blur(18px);
+    }
+
+    .top-back-row {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 14px;
+    }
+
+    .back-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #0f172a;
+        background: rgba(255,255,255,0.78);
+        border: 1px solid rgba(15,23,42,0.1);
+        border-radius: 14px;
+        padding: 9px 16px;
+        font-weight: 850;
+        text-decoration: none;
+        transition: 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .back-btn:hover {
+        color: #2563eb;
+        border-color: rgba(37,99,235,0.35);
+        transform: translateY(-2px);
+    }
+
+    .form-top {
+        margin-bottom: 24px;
+    }
+
+    .form-top h2 {
+        font-size: 2rem;
+        font-weight: 950;
+        color: #0f172a;
+        margin-bottom: 8px;
+        letter-spacing: -0.7px;
+    }
+
+    .form-top p {
+        color: #64748b;
+        margin: 0;
+        line-height: 1.7;
+        font-size: 0.97rem;
+        font-weight: 600;
+    }
+
+    .register-form .form-label {
+        font-weight: 800;
+        color: #334155;
+        margin-bottom: 8px;
+        font-size: 0.94rem;
+    }
+
+    .input-wrap {
+        border-radius: 16px;
+        overflow: hidden;
+        background: rgba(255,255,255,0.9);
+        border: 1px solid rgba(226,232,240,0.95);
+        transition: 0.25s ease;
+        display: flex;
+        align-items: center;
+    }
+
+    .input-wrap:focus-within {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 4px rgba(37,99,235,0.12);
+        transform: translateY(-1px);
+    }
+
+    .input-wrap .input-icon {
+        color: #2563eb;
+        padding-left: 16px;
+        padding-right: 2px;
+        width: 42px;
+        text-align: center;
+    }
+
+    .input-wrap .form-control {
+        height: 52px;
+        border: none;
+        background: transparent;
+        padding: 0 14px;
+        font-size: 0.98rem;
+        box-shadow: none;
+        font-weight: 600;
+        color: #0f172a;
+    }
+
+    .input-wrap .form-control::placeholder {
+        color: #94a3b8;
+        font-weight: 500;
+    }
+
+    .password-toggle {
+        border: none;
+        background: transparent;
+        color: #64748b;
+        padding: 0 15px;
+        transition: 0.25s ease;
+    }
+
+    .password-toggle:hover {
+        color: #2563eb;
+    }
+
+    .input-note {
+        display: block;
+        margin-top: 8px;
+        font-size: 0.82rem;
+        color: #94a3b8;
+        font-weight: 600;
+    }
+
+    .register-btn {
+        width: 100%;
+        border: none;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #2563eb, #7c3aed);
+        color: #fff;
+        font-weight: 900;
+        font-size: 1rem;
+        padding: 15px 18px;
+        margin-top: 8px;
+        transition: 0.3s ease;
+        box-shadow: 0 16px 34px rgba(37,99,235,0.28);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .register-btn::before,
+    .back-btn::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -80%;
+        width: 55%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+        transform: skewX(-18deg);
+        transition: 0.55s ease;
+    }
+
+    .register-btn:hover::before,
+    .back-btn:hover::before {
+        left: 130%;
+    }
+
+    .register-btn:hover {
+        transform: translateY(-3px);
+        color: #fff;
+        box-shadow: 0 22px 42px rgba(37,99,235,0.38);
+    }
+
+    .secure-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-top: 20px;
+        color: #64748b;
+        font-size: 0.86rem;
+        font-weight: 750;
+    }
+
+    .secure-row span {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255,255,255,0.65);
+        border: 1px solid rgba(226,232,240,0.75);
+        padding: 8px 10px;
+        border-radius: 999px;
+    }
+
+    .secure-row i {
+        color: #16a34a;
+    }
+
+    .divider-text {
+        text-align: center;
+        color: #94a3b8;
+        font-size: 0.9rem;
+        margin: 22px 0 18px;
+        position: relative;
+        font-weight: 700;
+    }
+
+    .divider-text::before,
+    .divider-text::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        width: 32%;
+        height: 1px;
+        background: #e2e8f0;
+    }
+
+    .divider-text::before { left: 0; }
+    .divider-text::after { right: 0; }
+
+    .bottom-links {
+        text-align: center;
+        font-size: 0.95rem;
+        color: #64748b;
+        margin-top: 18px;
+        font-weight: 600;
+    }
+
+    .bottom-links a {
+        color: #2563eb;
+        text-decoration: none;
+        font-weight: 850;
+    }
+
+    .flash-box {
+        border-radius: 14px;
+        padding: 12px 14px;
+        margin-bottom: 16px;
+        font-size: 0.94rem;
+        font-weight: 700;
+    }
+
+    .flash-success {
+        background: #ecfdf5;
+        border: 1px solid #bbf7d0;
+        color: #166534;
+    }
+
+    .flash-danger {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #991b1b;
+    }
+
+    .flash-warning {
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        color: #92400e;
+    }
+
+    .flash-info {
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        color: #1d4ed8;
+    }
+
+    @media (max-width: 991px) {
+        .register-shell {
+            grid-template-columns: 1fr;
+        }
+
+        .register-left,
+        .register-right {
+            padding: 38px 24px;
+        }
+    }
+
+    @media (max-width: 575px) {
+        .cursor-glow {
+            display: none;
+        }
+
+        .register-page {
+            padding: 20px 12px;
+        }
+
+        .register-shell {
+            border-radius: 24px;
+        }
+
+        .register-left,
+        .register-right {
+            padding: 30px 20px;
+        }
+
+        .form-top h2 {
+            font-size: 1.7rem;
+        }
+
+        .register-title {
+            font-size: 2rem;
+        }
+
+        .divider-text::before,
+        .divider-text::after {
+            width: 25%;
+        }
+
+        .secure-row span {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+</style>
+
+<div class="register-page">
+    <div class="cursor-glow" id="cursorGlow"></div>
+
+    <div class="register-shell">
+        <div class="register-left">
+            <div class="brand-row">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA">
+                <span>FLOWRA</span>
+            </div>
+
+            <div class="trial-badge">
+                <i class="fa-solid fa-gift"></i>
+                <span>7-Day Free Trial Included</span>
+            </div>
+
+            <h1 class="register-title">Create your account and start using FLOWRA today.</h1>
+
+            <p class="register-subtitle">
+                Launch your business dashboard with fast onboarding, live analytics, coupon workflows,
+                task visibility, and secure multi-user access — all from one place.
+            </p>
+
+            <ul class="feature-points">
+                <li><i class="fa-solid fa-check"></i><span>No payment required to start your free trial.</span></li>
+                <li><i class="fa-solid fa-check"></i><span>Choose monthly or yearly plans after trial ends.</span></li>
+                <li><i class="fa-solid fa-check"></i><span>Secure login with session control and role-based access.</span></li>
+                <li><i class="fa-solid fa-check"></i><span>Built for Indian businesses with modern workflow automation.</span></li>
+            </ul>
+        </div>
+
+        <div class="register-right">
+            <div class="top-back-row">
+                <a href="javascript:history.back()" class="back-btn">
+                    <i class="fa-solid fa-arrow-left"></i> Back
+                </a>
+            </div>
+
+            <div class="form-top">
+                <h2>Create Account</h2>
+                <p>Fill in your details below to start your free trial.</p>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash-box
+                            {% if category == 'success' %}flash-success{% elif category == 'danger' %}flash-danger{% elif category == 'warning' %}flash-warning{% else %}flash-info{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="{{ url_for('auth.register') }}" class="register-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="mb-3">
+                    <label class="form-label">Full Name</label>
+                    <div class="input-wrap">
+                        <span class="input-icon"><i class="fa-solid fa-user"></i></span>
+                        <input type="text" name="name" class="form-control" placeholder="Enter your full name" required>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Email Address</label>
+                    <div class="input-wrap">
+                        <span class="input-icon"><i class="fa-solid fa-envelope"></i></span>
+                        <input type="email" name="email" class="form-control" placeholder="Enter your email" required>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Phone</label>
+                    <div class="input-wrap">
+                        <span class="input-icon"><i class="fa-solid fa-phone"></i></span>
+                        <input type="text" name="phone" class="form-control" placeholder="Enter phone number">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <div class="input-wrap">
+                        <span class="input-icon"><i class="fa-solid fa-lock"></i></span>
+                        <input type="password" name="password" class="form-control" placeholder="Create a strong password" required id="passwordInput">
+                        <button class="password-toggle" type="button" id="togglePassword">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
+                    <small class="input-note">Use at least 8 characters for better security.</small>
+                </div>
+
+                <button type="submit" class="register-btn">
+                    Start Free Trial <i class="fa-solid fa-arrow-right ms-2"></i>
+                </button>
+
+                <div class="secure-row">
+                    <span><i class="fa-solid fa-lock"></i> Secure signup</span>
+                    <span><i class="fa-solid fa-bolt"></i> Quick activation</span>
+                    <span><i class="fa-solid fa-shield-halved"></i> Protected access</span>
+                </div>
+            </form>
+
+            <div class="divider-text">Already have an account?</div>
+
+            <div class="bottom-links">
+                <a href="{{ url_for('auth.login') }}">Login here</a>
+                &nbsp;|&nbsp;
+                <a href="{{ url_for('auth.pricing') }}">View pricing</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const cursorGlow = document.getElementById("cursorGlow");
+
+    document.addEventListener("mousemove", function(e) {
+        if (!cursorGlow) return;
+        cursorGlow.style.left = e.clientX + "px";
+        cursorGlow.style.top = e.clientY + "px";
+    });
+
+    const togglePassword = document.getElementById("togglePassword");
+    const passwordInput = document.getElementById("passwordInput");
+
+    if (togglePassword && passwordInput) {
+        togglePassword.addEventListener("click", function() {
+            const icon = this.querySelector("i");
+
+            if (passwordInput.type === "password") {
+                passwordInput.type = "text";
+                icon.classList.remove("fa-eye");
+                icon.classList.add("fa-eye-slash");
+            } else {
+                passwordInput.type = "password";
+                icon.classList.remove("fa-eye-slash");
+                icon.classList.add("fa-eye");
+            }
+        });
+    }
+</script>
+{% endblock %}

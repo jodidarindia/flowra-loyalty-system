@@ -1,0 +1,1139 @@
+{% extends "base.html" %}
+{% block title %}Subscription - FLOWRA{% endblock %}
+
+{% block content %}
+<style>
+:root {
+    --blue: #2563eb;
+    --purple: #7c3aed;
+    --cyan: #06b6d4;
+    --dark: #0f172a;
+    --muted: #64748b;
+}
+
+.sub-page {
+    min-height: 100vh;
+    position: relative;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 15% 15%, rgba(37,99,235,0.45), transparent 28%),
+        radial-gradient(circle at 85% 25%, rgba(124,58,237,0.35), transparent 30%),
+        radial-gradient(circle at 50% 95%, rgba(6,182,212,0.28), transparent 30%),
+        linear-gradient(135deg, #eef5ff, #f7f2ff);
+    padding: 42px 16px 90px;
+}
+
+.cursor-glow {
+    position: fixed;
+    width: 330px;
+    height: 330px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(37,99,235,0.25), transparent 70%);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.sub-page::before,
+.sub-page::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(35px);
+    opacity: 0.55;
+    animation: floatBlob 8s ease-in-out infinite alternate;
+}
+
+.sub-page::before {
+    width: 280px;
+    height: 280px;
+    background: #2563eb;
+    left: -90px;
+    top: 80px;
+}
+
+.sub-page::after {
+    width: 340px;
+    height: 340px;
+    background: #7c3aed;
+    right: -120px;
+    bottom: 70px;
+    animation-delay: 2s;
+}
+
+@keyframes floatBlob {
+    from { transform: translateY(0) scale(1); }
+    to { transform: translateY(-35px) scale(1.08); }
+}
+
+.sub-wrapper {
+    position: relative;
+    z-index: 2;
+    max-width: 1180px;
+    margin: 0 auto;
+}
+
+.sub-card {
+    background: rgba(255,255,255,0.78);
+    border: 1px solid rgba(255,255,255,0.75);
+    border-radius: 32px;
+    padding: 30px;
+    box-shadow: 0 28px 70px rgba(15,23,42,0.16);
+    backdrop-filter: blur(18px);
+    animation: cardUp 0.7s ease;
+}
+
+@keyframes cardUp {
+    from { opacity: 0; transform: translateY(28px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.sub-card.shake {
+    animation: shakeCard 0.35s ease;
+}
+
+@keyframes shakeCard {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-8px); }
+    40% { transform: translateX(8px); }
+    60% { transform: translateX(-6px); }
+    80% { transform: translateX(6px); }
+}
+
+.sub-hero {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 18px;
+    align-items: center;
+    margin-bottom: 26px;
+}
+
+.sub-title {
+    font-size: clamp(2rem, 4vw, 2.8rem);
+    font-weight: 950;
+    color: var(--dark);
+    margin-bottom: 10px;
+    letter-spacing: -1.3px;
+    line-height: 1.08;
+}
+
+.sub-text {
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1.75;
+    margin: 0;
+    max-width: 760px;
+    font-weight: 600;
+}
+
+.top-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.back-btn,
+.plan-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 999px;
+    padding: 11px 17px;
+    font-size: 0.9rem;
+    font-weight: 850;
+    text-decoration: none;
+    transition: 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.back-btn {
+    background: rgba(255,255,255,0.78);
+    color: #0f172a;
+    border: 1px solid rgba(15,23,42,0.1);
+}
+
+.back-btn:hover {
+    color: #2563eb;
+    border-color: rgba(37,99,235,0.35);
+    transform: translateY(-2px);
+}
+
+.plan-badge {
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    color: #fff;
+    box-shadow: 0 14px 30px rgba(37,99,235,0.24);
+}
+
+.flash-box {
+    border-radius: 16px;
+    padding: 13px 15px;
+    margin-bottom: 18px;
+    font-size: 0.92rem;
+    font-weight: 750;
+}
+
+.flash-success { background: #ecfdf5; border: 1px solid #bbf7d0; color: #166534; }
+.flash-danger { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+.flash-warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+.flash-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+
+.sub-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+    gap: 24px;
+    align-items: flex-start;
+}
+
+.form-panel,
+.payment-panel {
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(255,255,255,0.78);
+    border-radius: 28px;
+    padding: 24px;
+    backdrop-filter: blur(18px);
+    box-shadow: 0 16px 36px rgba(15,23,42,0.07);
+}
+
+.payment-panel {
+    position: sticky;
+    top: 22px;
+}
+
+.form-step {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 18px;
+    border-radius: 22px;
+    background: rgba(255,255,255,0.58);
+    border: 1px solid rgba(226,232,240,0.78);
+    margin-bottom: 18px;
+}
+
+.step-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 14px 28px rgba(37,99,235,0.22);
+    flex-shrink: 0;
+}
+
+.step-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.step-title {
+    font-size: 1.12rem;
+    font-weight: 950;
+    color: var(--dark);
+    margin: 0 0 4px;
+}
+
+.step-desc {
+    color: var(--muted);
+    font-size: 0.88rem;
+    margin: 0 0 16px;
+    line-height: 1.6;
+    font-weight: 600;
+}
+
+.field-block {
+    margin-bottom: 15px;
+}
+
+.form-label {
+    font-size: 0.88rem;
+    font-weight: 850;
+    color: #334155;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.required-mark {
+    color: #dc2626;
+}
+
+.input-wrap {
+    border-radius: 17px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid rgba(226,232,240,0.95);
+    transition: 0.25s ease;
+    display: flex;
+    align-items: center;
+}
+
+.input-wrap:focus-within {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37,99,235,0.12);
+    transform: translateY(-1px);
+}
+
+.input-icon {
+    color: #2563eb;
+    width: 42px;
+    text-align: center;
+    padding-left: 14px;
+    flex-shrink: 0;
+}
+
+.form-control,
+.form-select {
+    min-height: 53px;
+    border: none !important;
+    box-shadow: none !important;
+    font-size: 0.95rem;
+    padding-left: 14px;
+    padding-right: 14px;
+    background: transparent !important;
+    font-weight: 650;
+    color: #0f172a;
+}
+
+.form-control::placeholder {
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+textarea.form-control {
+    min-height: 112px;
+    resize: vertical;
+    padding-top: 13px;
+}
+
+.textarea-wrap {
+    align-items: flex-start;
+}
+
+.textarea-wrap .input-icon {
+    padding-top: 17px;
+}
+
+.field-error,
+.input-wrap.field-error {
+    border-color: #dc2626 !important;
+    background: rgba(254,242,242,0.96) !important;
+}
+
+.field-error-text {
+    color: #dc2626;
+    font-size: 0.79rem;
+    margin-top: 6px;
+    display: none;
+    font-weight: 800;
+}
+
+.field-error-text.show {
+    display: block;
+}
+
+.upload-box {
+    position: relative;
+    border: 1.5px dashed #93c5fd;
+    border-radius: 20px;
+    padding: 18px;
+    background: rgba(239,246,255,0.65);
+    text-align: center;
+    transition: 0.25s ease;
+}
+
+.upload-box:hover {
+    border-color: #2563eb;
+    background: rgba(219,234,254,0.72);
+    transform: translateY(-1px);
+}
+
+.upload-box input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.upload-icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 10px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    box-shadow: 0 14px 28px rgba(37,99,235,0.22);
+}
+
+.upload-title {
+    font-weight: 950;
+    color: #0f172a;
+    margin-bottom: 4px;
+}
+
+.upload-sub {
+    color: #64748b;
+    font-size: 0.82rem;
+    font-weight: 650;
+}
+
+.upload-file-name {
+    margin-top: 10px;
+    color: #2563eb;
+    font-weight: 850;
+    font-size: 0.84rem;
+    word-break: break-all;
+}
+
+.payment-title {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin-bottom: 18px;
+}
+
+.payment-title-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 15px;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 14px 28px rgba(37,99,235,0.22);
+}
+
+.payment-title h4 {
+    margin: 0;
+    font-weight: 950;
+    color: #0f172a;
+    font-size: 1.15rem;
+}
+
+.payment-title p {
+    margin: 2px 0 0;
+    color: #64748b;
+    font-size: 0.84rem;
+    font-weight: 650;
+}
+
+.amount-card {
+    border-radius: 24px;
+    padding: 20px;
+    background:
+        radial-gradient(circle at 15% 15%, rgba(255,255,255,0.18), transparent 28%),
+        linear-gradient(135deg, #0f172a, #1e293b);
+    color: #fff;
+    box-shadow: 0 20px 44px rgba(15,23,42,0.24);
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+}
+
+.amount-card::after {
+    content: "";
+    position: absolute;
+    width: 170px;
+    height: 170px;
+    border-radius: 50%;
+    background: rgba(37,99,235,0.35);
+    right: -70px;
+    top: -70px;
+    filter: blur(4px);
+}
+
+.amount-label {
+    color: #cbd5e1;
+    font-weight: 800;
+    font-size: 0.86rem;
+}
+
+.amount-value {
+    font-size: 2.2rem;
+    font-weight: 950;
+    letter-spacing: -1px;
+    margin-top: 4px;
+    position: relative;
+    z-index: 1;
+}
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+    color: #e2e8f0;
+    font-size: 0.9rem;
+    font-weight: 700;
+    position: relative;
+    z-index: 1;
+}
+
+.summary-row strong {
+    color: #fff;
+}
+
+.upi-box {
+    background: rgba(239,246,255,0.9);
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    border-radius: 18px;
+    padding: 13px 14px;
+    font-weight: 900;
+    font-size: 0.9rem;
+    word-break: break-all;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 16px;
+}
+
+.qr-card {
+    border: 1px dashed #93c5fd;
+    border-radius: 24px;
+    padding: 18px;
+    text-align: center;
+    background: rgba(255,255,255,0.78);
+    margin-bottom: 16px;
+}
+
+.qr-card img {
+    max-width: 220px;
+    width: 100%;
+    border-radius: 18px;
+    box-shadow: 0 14px 30px rgba(15,23,42,0.12);
+}
+
+.qr-note {
+    font-size: 0.84rem;
+    color: #64748b;
+    margin-top: 12px;
+    line-height: 1.65;
+    font-weight: 650;
+}
+
+.helper-list {
+    margin: 0 0 16px;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 9px;
+}
+
+.helper-list li {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    color: #64748b;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    font-weight: 650;
+}
+
+.helper-list i {
+    color: #22c55e;
+    margin-top: 3px;
+}
+
+.secure-box {
+    background: rgba(249,250,251,0.78);
+    border: 1px solid rgba(226,232,240,0.85);
+    border-radius: 17px;
+    padding: 13px 14px;
+    color: #64748b;
+    font-size: 0.84rem;
+    line-height: 1.6;
+    font-weight: 650;
+}
+
+.secure-box i {
+    color: #22c55e;
+    margin-right: 8px;
+}
+
+.submit-btn {
+    width: 100%;
+    min-height: 56px;
+    border: none;
+    border-radius: 18px;
+    font-weight: 950;
+    font-size: 1rem;
+    transition: 0.3s ease;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    color: #fff;
+    margin-top: 18px;
+    box-shadow: 0 16px 34px rgba(37,99,235,0.28);
+    position: relative;
+    overflow: hidden;
+}
+
+.submit-btn::before,
+.back-btn::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -80%;
+    width: 55%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+    transform: skewX(-18deg);
+    transition: 0.55s ease;
+}
+
+.submit-btn:hover::before,
+.back-btn:hover::before {
+    left: 130%;
+}
+
+.submit-btn:hover {
+    transform: translateY(-3px);
+    color: #fff;
+    box-shadow: 0 22px 42px rgba(37,99,235,0.38);
+}
+
+.mini-note {
+    margin-top: 11px;
+    color: #64748b;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    text-align: center;
+    font-weight: 650;
+}
+
+@media (max-width: 991px) {
+    .sub-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .payment-panel {
+        position: static;
+    }
+
+    .sub-hero {
+        grid-template-columns: 1fr;
+    }
+
+    .top-actions {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 575px) {
+    .cursor-glow {
+        display: none;
+    }
+
+    .sub-page {
+        padding: 20px 12px 70px;
+    }
+
+    .sub-card {
+        padding: 18px;
+        border-radius: 24px;
+    }
+
+    .form-panel,
+    .payment-panel {
+        padding: 16px;
+        border-radius: 22px;
+    }
+
+    .form-step {
+        padding: 14px;
+        border-radius: 19px;
+        gap: 11px;
+    }
+
+    .step-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 14px;
+    }
+
+    .sub-title {
+        font-size: 2rem;
+    }
+
+    .top-actions {
+        width: 100%;
+    }
+
+    .back-btn,
+    .plan-badge {
+        width: 100%;
+    }
+
+    .amount-value {
+        font-size: 1.8rem;
+    }
+}
+</style>
+
+<div class="sub-page">
+    <div class="cursor-glow" id="cursorGlow"></div>
+
+    <div class="sub-wrapper">
+        <div class="sub-card" id="subCard">
+
+            <div class="sub-hero">
+                <div>
+                    <h2 class="sub-title">Complete your FLOWRA subscription</h2>
+                    <p class="sub-text">
+                        Add your business details, complete the UPI payment, upload the screenshot,
+                        and submit your request for admin verification.
+                    </p>
+                </div>
+
+                <div class="top-actions">
+                    <a href="{{ url_for('auth.pricing') }}" class="back-btn">
+                        <i class="fa-solid fa-arrow-left"></i> Back to Plans
+                    </a>
+
+                    <div class="plan-badge">
+                        <i class="fa-solid fa-calendar-check"></i>
+                        <span>Cycle:</span>
+                        <span id="topCyclePreview">{{ selected_cycle or 'yearly' }}</span>
+                    </div>
+                </div>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash-box
+                            {% if category == 'success' %}flash-success{% elif category == 'danger' %}flash-danger{% elif category == 'warning' %}flash-warning{% else %}flash-info{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form id="subscriptionForm" method="POST" action="{{ url_for('auth.subscription') }}" enctype="multipart/form-data" novalidate>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="billing_cycle" id="billing_cycle" value="{{ selected_cycle or 'yearly' }}">
+                <input type="hidden" name="payment_done" value="1">
+                <input type="hidden" name="payment_id" value="manual_upi_payment">
+                <input type="hidden" name="order_id" value="manual_upi_order">
+                <input type="hidden" name="amount" id="amountInput" value="0">
+
+                <div class="sub-grid">
+                    <div class="form-panel">
+
+                        <div class="form-step">
+                            <div class="step-icon">
+                                <i class="fa-solid fa-building"></i>
+                            </div>
+
+                            <div class="step-content">
+                                <h4 class="step-title">Business Information</h4>
+                                <p class="step-desc">Tell us who we are onboarding.</p>
+
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="field-block">
+                                            <label class="form-label">Company Name <span class="required-mark">*</span></label>
+                                            <div class="input-wrap">
+                                                <span class="input-icon"><i class="fa-solid fa-building"></i></span>
+                                                <input type="text" class="form-control required-field" name="company_name" id="company_name"
+                                                       placeholder="Acme Trading Co." value="{{ request.form.get('company_name', '') }}">
+                                            </div>
+                                            <div class="field-error-text" id="company_name_error">Company name is required.</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <div class="field-block">
+                                            <label class="form-label">Contact Person <span class="required-mark">*</span></label>
+                                            <div class="input-wrap">
+                                                <span class="input-icon"><i class="fa-solid fa-user"></i></span>
+                                                <input type="text" class="form-control required-field" name="contact_person" id="contact_person"
+                                                       placeholder="Rajesh Agrawal" value="{{ request.form.get('contact_person', '') }}">
+                                            </div>
+                                            <div class="field-error-text" id="contact_person_error">Contact person is required.</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <div class="field-block">
+                                            <label class="form-label">Email <span class="required-mark">*</span></label>
+                                            <div class="input-wrap">
+                                                <span class="input-icon"><i class="fa-solid fa-envelope"></i></span>
+                                                <input type="email" class="form-control required-field" name="email" id="email"
+                                                       placeholder="rajesh@company.com" value="{{ request.form.get('email', '') }}">
+                                            </div>
+                                            <div class="field-error-text" id="email_error">Valid email is required.</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <div class="field-block">
+                                            <label class="form-label">Phone <span class="required-mark">*</span></label>
+                                            <div class="input-wrap">
+                                                <span class="input-icon"><i class="fa-solid fa-phone"></i></span>
+                                                <input type="text" class="form-control required-field" name="phone" id="phone"
+                                                       placeholder="+91 9876543210" value="{{ request.form.get('phone', '') }}">
+                                            </div>
+                                            <div class="field-error-text" id="phone_error">Phone is required.</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <div class="field-block">
+                                            <label class="form-label">GST Number</label>
+                                            <div class="input-wrap">
+                                                <span class="input-icon"><i class="fa-solid fa-receipt"></i></span>
+                                                <input type="text" class="form-control" name="gst_number" id="gst_number"
+                                                       placeholder="22AAAAA0000A1Z5" value="{{ request.form.get('gst_number', '') }}">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <div class="field-block">
+                                            <label class="form-label">Preferred Plan <span class="required-mark">*</span></label>
+                                            <div class="input-wrap">
+                                                <span class="input-icon"><i class="fa-solid fa-layer-group"></i></span>
+                                                <select class="form-select required-field" name="preferred_plan" id="preferred_plan">
+                                                    <option value="">Select a plan</option>
+                                                    <option value="starter" {% if selected_plan == 'starter' or request.form.get('preferred_plan') == 'starter' %}selected{% endif %}>Starter</option>
+                                                    <option value="professional" {% if selected_plan == 'professional' or request.form.get('preferred_plan') == 'professional' %}selected{% endif %}>Professional</option>
+                                                    <option value="enterprise" {% if selected_plan == 'enterprise' or request.form.get('preferred_plan') == 'enterprise' %}selected{% endif %}>Enterprise</option>
+                                                </select>
+                                            </div>
+                                            <div class="field-error-text" id="preferred_plan_error">Please select a plan.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-step">
+                            <div class="step-icon">
+                                <i class="fa-solid fa-location-dot"></i>
+                            </div>
+
+                            <div class="step-content">
+                                <h4 class="step-title">Extra Details</h4>
+                                <p class="step-desc">Optional details help us onboard your business faster.</p>
+
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <div class="field-block">
+                                            <label class="form-label">Address</label>
+                                            <div class="input-wrap">
+                                                <span class="input-icon"><i class="fa-solid fa-location-dot"></i></span>
+                                                <input type="text" class="form-control" name="address" id="address"
+                                                       placeholder="Your business address" value="{{ request.form.get('address', '') }}">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="field-block">
+                                            <label class="form-label">Message</label>
+                                            <div class="input-wrap textarea-wrap">
+                                                <span class="input-icon"><i class="fa-solid fa-message"></i></span>
+                                                <textarea class="form-control" name="message" id="message"
+                                                          placeholder="Tell us about your business needs...">{{ request.form.get('message', '') }}</textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="field-block">
+                                            <label class="form-label">Referral Code</label>
+                                            <div class="input-wrap">
+                                                <span class="input-icon"><i class="fa-solid fa-ticket"></i></span>
+                                                <input type="text" class="form-control" name="referral_code" id="referral_code"
+                                                       placeholder="REF-XXXXXX" value="{{ request.form.get('referral_code', '') }}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-step">
+                            <div class="step-icon">
+                                <i class="fa-solid fa-cloud-arrow-up"></i>
+                            </div>
+
+                            <div class="step-content">
+                                <h4 class="step-title">Payment Proof</h4>
+                                <p class="step-desc">Upload payment screenshot after completing UPI payment.</p>
+
+                                <label class="form-label">Payment Screenshot <span class="required-mark">*</span></label>
+                                <div class="upload-box" id="uploadBox">
+                                    <input type="file" class="required-field" name="payment_screenshot" id="payment_screenshot" accept=".jpg,.jpeg,.png,.pdf">
+                                    <div class="upload-icon">
+                                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                                    </div>
+                                    <div class="upload-title">Click to upload screenshot</div>
+                                    <div class="upload-sub">JPG, PNG or PDF accepted</div>
+                                    <div class="upload-file-name" id="uploadFileName"></div>
+                                </div>
+                                <div class="field-error-text" id="payment_screenshot_error">Payment screenshot is required.</div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="payment-panel">
+                        <div class="payment-title">
+                            <div class="payment-title-icon">
+                                <i class="fa-solid fa-qrcode"></i>
+                            </div>
+                            <div>
+                                <h4>Payment Summary</h4>
+                                <p>Manual UPI verification</p>
+                            </div>
+                        </div>
+
+                        <div class="amount-card">
+                            <div class="amount-label">Amount to Pay</div>
+                            <div class="amount-value">₹<span id="amountPreview">0</span></div>
+
+                            <div class="summary-row">
+                                <span>Plan</span>
+                                <strong id="planPreview">{{ selected_plan or 'Not selected' }}</strong>
+                            </div>
+
+                            <div class="summary-row">
+                                <span>Billing</span>
+                                <strong id="cyclePreview">{{ selected_cycle or 'yearly' }}</strong>
+                            </div>
+                        </div>
+
+                        <div class="upi-box">
+                            <i class="fa-solid fa-indian-rupee-sign"></i>
+                            <span>UPI ID: 7723800154@slc</span>
+                        </div>
+
+                        <div class="qr-card">
+                            <img src="{{ url_for('static', filename='images/payment_qr.jpeg') }}" alt="UPI QR">
+                            <div class="qr-note">
+                                Scan this QR, pay ₹<span id="amountPreviewInline">0</span>, upload screenshot, then submit.
+                            </div>
+                        </div>
+
+                        <ul class="helper-list">
+                            <li><i class="fa-solid fa-circle-check"></i><span>Pay exactly the shown amount.</span></li>
+                            <li><i class="fa-solid fa-circle-check"></i><span>Upload a clear screenshot after payment.</span></li>
+                            <li><i class="fa-solid fa-circle-check"></i><span>Admin will verify and activate your account.</span></li>
+                        </ul>
+
+                        <div class="secure-box">
+                            <i class="fa-solid fa-shield-halved"></i>
+                            Your company details and payment proof are securely stored for verification.
+                        </div>
+
+                        <button type="submit" class="submit-btn">
+                            Submit Enquiry <i class="fa-solid fa-arrow-right ms-2"></i>
+                        </button>
+
+                        <div class="mini-note">
+                            Screenshot ke bina form submit nahi hoga.
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+<script>
+const cursorGlow = document.getElementById("cursorGlow");
+
+document.addEventListener("mousemove", function(e) {
+    if (!cursorGlow) return;
+    cursorGlow.style.left = e.clientX + "px";
+    cursorGlow.style.top = e.clientY + "px";
+});
+
+const form = document.getElementById("subscriptionForm");
+const subCard = document.getElementById("subCard");
+
+const requiredFields = [
+    { id: "company_name", type: "text" },
+    { id: "contact_person", type: "text" },
+    { id: "email", type: "email" },
+    { id: "phone", type: "text" },
+    { id: "preferred_plan", type: "select" },
+    { id: "payment_screenshot", type: "file" }
+];
+
+const priceMap = {
+    starter: { monthly: 999, yearly: 9990 },
+    professional: { monthly: 2499, yearly: 24990 },
+    enterprise: { monthly: 3799, yearly: 37990 }
+};
+
+function validateEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function showFieldError(fieldId, show, message = "") {
+    const input = document.getElementById(fieldId);
+    const error = document.getElementById(fieldId + "_error");
+
+    if (!input || !error) return;
+
+    const wrap = input.closest(".input-wrap") || input.closest(".upload-box");
+
+    if (show) {
+        input.classList.add("field-error");
+        if (wrap) wrap.classList.add("field-error");
+        if (message) error.textContent = message;
+        error.classList.add("show");
+    } else {
+        input.classList.remove("field-error");
+        if (wrap) wrap.classList.remove("field-error");
+        error.classList.remove("show");
+    }
+}
+
+function validateFormOnlyHighlight() {
+    let valid = true;
+
+    requiredFields.forEach(field => {
+        const input = document.getElementById(field.id);
+
+        if (field.type === "file") {
+            if (!input.files || input.files.length === 0) {
+                valid = false;
+                showFieldError(field.id, true);
+                return;
+            }
+            showFieldError(field.id, false);
+            return;
+        }
+
+        const value = (input.value || "").trim();
+
+        if (!value) {
+            valid = false;
+            showFieldError(field.id, true);
+            return;
+        }
+
+        if (field.type === "email" && !validateEmail(value)) {
+            valid = false;
+            showFieldError(field.id, true, "Enter a valid email address.");
+            return;
+        }
+
+        showFieldError(field.id, false);
+    });
+
+    return valid;
+}
+
+requiredFields.forEach(field => {
+    const input = document.getElementById(field.id);
+
+    input.addEventListener("input", () => {
+        if (field.type !== "file" && (input.value || "").trim()) {
+            showFieldError(field.id, false);
+        }
+    });
+
+    input.addEventListener("change", () => {
+        if (field.type === "file") {
+            if (input.files && input.files.length > 0) showFieldError(field.id, false);
+        } else if ((input.value || "").trim()) {
+            showFieldError(field.id, false);
+        }
+    });
+});
+
+form.addEventListener("submit", function(e) {
+    const valid = validateFormOnlyHighlight();
+
+    if (!valid) {
+        e.preventDefault();
+
+        subCard.classList.remove("shake");
+        void subCard.offsetWidth;
+        subCard.classList.add("shake");
+
+        const firstError = document.querySelector(".field-error");
+        if (firstError) {
+            firstError.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+    }
+});
+
+const uploadInput = document.getElementById("payment_screenshot");
+const uploadFileName = document.getElementById("uploadFileName");
+
+uploadInput.addEventListener("change", function() {
+    if (this.files && this.files.length > 0) {
+        uploadFileName.textContent = "Selected: " + this.files[0].name;
+    } else {
+        uploadFileName.textContent = "";
+    }
+});
+
+const urlParams = new URLSearchParams(window.location.search);
+const billingCycleInput = document.getElementById("billing_cycle");
+const cyclePreview = document.getElementById("cyclePreview");
+const topCyclePreview = document.getElementById("topCyclePreview");
+const planInput = document.getElementById("preferred_plan");
+const planPreview = document.getElementById("planPreview");
+const amountPreview = document.getElementById("amountPreview");
+const amountPreviewInline = document.getElementById("amountPreviewInline");
+const amountInput = document.getElementById("amountInput");
+
+const cycle = urlParams.get("cycle");
+if (cycle === "monthly" || cycle === "yearly") {
+    billingCycleInput.value = cycle;
+    cyclePreview.textContent = cycle;
+    topCyclePreview.textContent = cycle;
+}
+
+function updatePlanPreview() {
+    planPreview.textContent = planInput.value || "Not selected";
+}
+
+function updateAmount() {
+    const plan = (planInput.value || "").toLowerCase();
+    const cycle = (billingCycleInput.value || "").toLowerCase();
+
+    let amount = 0;
+    if (priceMap[plan] && priceMap[plan][cycle]) {
+        amount = priceMap[plan][cycle];
+    }
+
+    amountPreview.textContent = amount;
+    amountPreviewInline.textContent = amount;
+    amountInput.value = amount;
+}
+
+planInput.addEventListener("change", () => {
+    updatePlanPreview();
+    updateAmount();
+});
+
+billingCycleInput.addEventListener("change", () => {
+    cyclePreview.textContent = billingCycleInput.value;
+    topCyclePreview.textContent = billingCycleInput.value;
+    updateAmount();
+});
+
+updatePlanPreview();
+updateAmount();
+</script>
+{% endblock %}

@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Company History{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+
+    <!-- NAVBAR -->
+    <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- MAIN -->
+    <div class="container-fluid py-4 px-4">
+        <div class="row g-4">
+
+            <!-- ✅ COMMON SIDEBAR -->
+            <div class="col-lg-3 col-xl-2">
+                <div class="dashboard-sidebar">
+
+                    <div class="sidebar-brand">
+                        <h5>{{ session['company_name'] }}</h5>
+                        <p>Admin Control Panel</p>
+                    </div>
+
+                    <div class="sidebar-menu">
+
+                        <a href="{{ url_for('admin.company_admin_dashboard') }}" class="sidebar-link">
+                            <i class="fa-solid fa-house"></i> Dashboard
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_employees_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-user-plus"></i> Employees
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_distributors_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-truck"></i> Distributors
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_retailers_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-shop"></i> Retailers
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_mechanics_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-screwdriver-wrench"></i> Mechanics
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_products_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-box-open"></i> Products
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_catalogues_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-book-open"></i> Catalogues
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_analytics') }}" class="sidebar-link">
+                            <i class="fa-solid fa-chart-line"></i> Analytics
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_history') }}" class="sidebar-link active">
+                            <i class="fa-solid fa-clock-rotate-left"></i> History
+                        </a>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- ✅ PAGE CONTENT -->
+            <div class="col-lg-9 col-xl-10">
+
+                <div class="dashboard-header mb-4">
+                    <h2 class="mb-1">{{ session.get('company_name', 'Company') }} History</h2>
+                    <p class="text-muted mb-0">
+                        Complete coupon activity history with generated, scanned and redeemed dates.
+                    </p>
+                </div>
+
+                <div class="company-table-card">
+                    <div class="table-responsive">
+                        <table class="table align-middle company-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Code</th>
+                                    <th>Product</th>
+                                    <th>Part No</th>
+                                    <th>Pack</th>
+                                    <th>Value</th>
+                                    <th>Status</th>
+                                    <th>Generated</th>
+                                    <th>Scanned</th>
+                                    <th>Redeemed</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                {% for row in history_rows %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ row[1] }}</td>
+                                    <td>{{ row[2] }}</td>
+                                    <td>{{ row[3] }}</td>
+                                    <td>{{ row[4] }}</td>
+                                    <td>{{ row[5] }}</td>
+
+                                    <td>
+                                        {% if row[6] == 'redeemed' %}
+                                            <span class="status-badge active-badge">Redeemed</span>
+                                        {% elif row[6] == 'scanned' %}
+                                            <span class="status-badge inactive-badge">Scanned</span>
+                                        {% else %}
+                                            <span class="status-badge">{{ row[6] }}</span>
+                                        {% endif %}
+                                    </td>
+
+                                    <td>{{ row[7] or '-' }}</td>
+                                    <td>{{ row[8] or '-' }}</td>
+                                    <td>{{ row[9] or '-' }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="10" class="text-center text-muted py-4">
+                                        No history found
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

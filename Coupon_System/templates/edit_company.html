@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Edit Company{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <div class="container py-5">
+        <div class="mb-3">
+            <a href="{{ url_for('admin.company_management') }}" class="btn back-btn">
+                <i class="fa-solid fa-arrow-left"></i> Back to Company Management
+            </a>
+        </div>
+
+        <div class="company-form-card mx-auto" style="max-width:700px;">
+            <h4>Edit Company</h4>
+            <p class="mb-4">Update company details and admin information.</p>
+
+            <form method="POST">
+                <div class="mb-3">
+                    <label class="form-label custom-label">Company Name</label>
+                    <input type="text" name="company_name" class="form-control modern-input"
+                           value="{{ company.name }}" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label custom-label">Admin Name</label>
+                    <input type="text" name="admin_name" class="form-control modern-input"
+                           value="{{ company.admin_name }}" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label custom-label">Status</label>
+                    <select name="status" class="form-select modern-input" required>
+                        <option value="Active" {% if company.status == "Active" %}selected{% endif %}>Active</option>
+                        <option value="Inactive" {% if company.status == "Inactive" %}selected{% endif %}>Inactive</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn flowra-btn w-100">Update Company</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

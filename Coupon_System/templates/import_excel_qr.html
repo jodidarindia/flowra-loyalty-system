@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Import Excel{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <div class="container py-5">
+
+        <div class="mb-3">
+            <a href="{{ url_for('admin.qr_employee_dashboard') }}" class="btn back-btn">
+                <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+
+        <div class="company-form-card mx-auto" style="max-width:750px;">
+            <h4>Import Excel for QR Generation</h4>
+            <p class="mb-4">
+                Upload your product sheet and system will generate coupons automatically.
+            </p>
+
+            <div style="background:#f1f5f9; padding:12px; border-radius:12px; margin-bottom:20px;">
+                <strong>Excel format:</strong><br>
+                product_name | product_type | part_no | mrp | pack_size | points | qr_size | code
+            </div>
+
+            <form method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="mb-3">
+                    <label class="form-label custom-label">Upload Excel File</label>
+                    <input type="file" name="excel_file" class="form-control modern-input" required>
+                </div>
+
+                <button type="submit" class="btn flowra-btn w-100">
+                    <i class="fa-solid fa-file-excel me-2"></i>
+                    Import & Generate QR
+                </button>
+            </form>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

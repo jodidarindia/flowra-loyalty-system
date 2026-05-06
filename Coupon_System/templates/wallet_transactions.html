@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Wallet Transactions{% endblock %}
+
+{% block content %}
+
+<style>
+/* Page fix */
+.wallet-page {
+    min-height: 100vh;
+}
+
+/* Scrollable table card */
+.wallet-table-card {
+    max-height: 600px;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+/* Sticky header */
+.wallet-table-card thead th {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 10;
+}
+
+/* Better spacing */
+.company-table td,
+.company-table th {
+    white-space: nowrap;
+}
+
+/* Smooth look */
+.wallet-table-card::-webkit-scrollbar {
+    width: 6px;
+}
+.wallet-table-card::-webkit-scrollbar-thumb {
+    background: #cbd5f5;
+    border-radius: 10px;
+}
+</style>
+
+<div class="dashboard-page wallet-page">
+    <div class="container py-5">
+
+        <!-- Back Button -->
+        <div class="mb-3">
+            <a href="{{ url_for('admin.general_employee_dashboard') }}" class="btn back-btn">
+                <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+
+        <!-- Header -->
+        <div class="dashboard-header mb-4">
+            <h2>Wallet Transactions</h2>
+            <p>Dealer points transaction history.</p>
+        </div>
+
+        <!-- Table -->
+        <div class="company-table-card wallet-table-card">
+            <div class="table-responsive">
+                <table class="table align-middle company-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Dealer</th>
+                            <th>Coupon ID</th>
+                            <th>Points</th>
+                            <th>Type</th>
+                            <th>Remarks</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for t in transactions %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ t[1] }}</td>
+                            <td>{{ t[2] or '-' }}</td>
+                            <td>{{ t[3] }}</td>
+                            <td>{{ t[4] }}</td>
+                            <td>{{ t[5] or '-' }}</td>
+                            <td>{{ t[6] }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">
+                                No transactions found.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{% endblock %}

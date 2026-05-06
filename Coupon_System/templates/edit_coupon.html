@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Edit Coupon{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <div class="container py-5">
+        <div class="mb-3">
+            <a href="{{ url_for('admin.coupon_list') }}" class="btn back-btn">
+                <i class="fa-solid fa-arrow-left"></i> Back to Coupon List
+            </a>
+        </div>
+
+        <div class="company-form-card mx-auto" style="max-width:750px;">
+            <h4>Edit Coupon</h4>
+
+            <form method="POST">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label custom-label">Product Name</label>
+                        <input type="text" name="product_name" class="form-control modern-input" value="{{ c[2] }}" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label custom-label">Product Type</label>
+                        <input type="text" name="product_type" class="form-control modern-input" value="{{ c[3] }}" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label custom-label">Part No</label>
+                        <input type="text" name="part_no" class="form-control modern-input" value="{{ c[4] }}" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label custom-label">MRP</label>
+                        <input type="number" step="0.01" name="mrp" class="form-control modern-input" value="{{ c[5] }}" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label custom-label">DLP</label>
+                        <input type="number" step="0.01" name="dlp" class="form-control modern-input" value="{{ c[6] }}" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label custom-label">Pack Size</label>
+                        <input type="text" name="pack_size" class="form-control modern-input" value="{{ c[7] }}" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label custom-label">Reward Value</label>
+                        <input type="number" name="points" class="form-control modern-input" value="{{ c[8] }}" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label custom-label">Coupon Size</label>
+                        <select name="qr_size" class="form-select modern-input" required>
+                            <option value="25x50" {% if c[9] == "25x50" %}selected{% endif %}>25 × 50 mm</option>
+                            <option value="50x50" {% if c[9] == "50x50" %}selected{% endif %}>50 × 50 mm</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="btn flowra-btn w-100 mt-4">Update Coupon</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

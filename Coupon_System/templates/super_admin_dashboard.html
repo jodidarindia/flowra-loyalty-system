@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+{% block title %}FLOWRA Super Admin Dashboard{% endblock %}
+
+{% block content %}
+<style>
+    .sa-page {
+        min-height: 100vh;
+        background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+    }
+
+    .sa-navbar {
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid #e5e7eb;
+        padding-top: 14px;
+        padding-bottom: 14px;
+    }
+
+    .nav-logo {
+        width: 34px;
+        height: 34px;
+        object-fit: cover;
+        border-radius: 8px;
+    }
+
+    .brand-text {
+        font-weight: 900;
+        font-size: 1.3rem;
+        color: #111827;
+    }
+
+    .welcome-text {
+        font-weight: 700;
+        color: #374151;
+        font-size: 0.95rem;
+    }
+
+    .sa-wrap {
+        padding: 34px 0 50px;
+    }
+
+    .hero-card {
+        background: linear-gradient(135deg, #0f172a 0%, #2563eb 100%);
+        border-radius: 24px;
+        padding: 28px;
+        color: #fff;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+        margin-bottom: 24px;
+    }
+
+    .hero-title {
+        font-size: 2rem;
+        font-weight: 900;
+        margin-bottom: 8px;
+        line-height: 1.1;
+        color: #ffffff;
+    }
+
+    .hero-text {
+        color: #e0f2fe;
+        margin-bottom: 18px;
+        max-width: 760px;
+        line-height: 1.7;
+    }
+
+    .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .hero-btn,
+    .hero-btn-outline {
+        border-radius: 12px;
+        padding: 11px 18px;
+        font-weight: 800;
+        text-decoration: none;
+        transition: 0.25s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .hero-btn {
+        background: #fff;
+        color: #111827;
+    }
+
+    .hero-btn:hover {
+        color: #111827;
+        transform: translateY(-1px);
+    }
+
+    .hero-btn-outline {
+        background: rgba(255,255,255,0.10);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,0.22);
+    }
+
+    .hero-btn-outline:hover {
+        color: #fff;
+        background: rgba(255,255,255,0.18);
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .stat-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+        text-align: center;
+    }
+
+    .stat-label {
+        color: #6b7280;
+        font-size: 0.84rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 10px;
+    }
+
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 900;
+        color: #111827;
+        line-height: 1;
+        margin-bottom: 8px;
+    }
+
+    .stat-sub {
+        color: #6b7280;
+        font-size: 0.88rem;
+        line-height: 1.5;
+    }
+
+    .sa-section-title {
+        font-size: 1.25rem;
+        font-weight: 900;
+        color: #111827;
+        margin-bottom: 16px;
+    }
+
+    .module-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+        margin-bottom: 24px;
+    }
+
+    .dashboard-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 22px;
+        padding: 22px;
+        height: 100%;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+        transition: 0.25s ease;
+    }
+
+    .dashboard-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 18px 36px rgba(15, 23, 42, 0.09);
+    }
+
+    .dashboard-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 1.3rem;
+        margin-bottom: 16px;
+    }
+
+    .gradient-1 { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
+    .gradient-2 { background: linear-gradient(135deg, #7c3aed, #6d28d9); }
+    .gradient-3 { background: linear-gradient(135deg, #0ea5e9, #0284c7); }
+    .gradient-4 { background: linear-gradient(135deg, #22c55e, #16a34a); }
+    .gradient-5 { background: linear-gradient(135deg, #f59e0b, #ea580c); }
+    .gradient-6 { background: linear-gradient(135deg, #ef4444, #dc2626); }
+
+    .dashboard-card h5 {
+        font-weight: 900;
+        color: #111827;
+        margin-bottom: 8px;
+    }
+
+    .dashboard-card p {
+        color: #6b7280;
+        line-height: 1.7;
+        min-height: 72px;
+        margin-bottom: 16px;
+    }
+
+    .flowra-btn-sm {
+        background: #111827;
+        color: #fff;
+        border: none;
+        border-radius: 12px;
+        padding: 10px 14px;
+        font-weight: 800;
+        text-decoration: none;
+        display: inline-block;
+        transition: 0.25s ease;
+    }
+
+    .flowra-btn-sm:hover {
+        color: #fff;
+        background: #000;
+    }
+
+    .info-row {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 18px;
+    }
+
+    .info-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 22px;
+        padding: 22px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    }
+
+    .info-card h4 {
+        font-size: 1.08rem;
+        font-weight: 900;
+        margin-bottom: 8px;
+        color: #111827;
+    }
+
+    .info-card p {
+        color: #6b7280;
+        margin-bottom: 0;
+        line-height: 1.7;
+    }
+
+    .mini-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .mini-list li {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 0;
+        border-bottom: 1px solid #eef2f7;
+        color: #374151;
+        font-weight: 700;
+    }
+
+    .mini-list li:last-child {
+        border-bottom: none;
+    }
+
+    .mini-list span:last-child {
+        color: #111827;
+        font-weight: 900;
+    }
+
+    @media (max-width: 1100px) {
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .module-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .info-row {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 700px) {
+        .stats-grid,
+        .module-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .hero-title {
+            font-size: 1.6rem;
+        }
+    }
+</style>
+
+<div class="sa-page">
+    <nav class="navbar navbar-expand-lg sa-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container sa-wrap">
+        <div class="hero-card">
+            <div class="hero-title">Super Admin Control Center</div>
+            <div class="hero-text">
+                Manage companies, verify paid subscription requests, create company admins, and track
+                platform-wide growth from one place.
+            </div>
+
+            <div class="hero-actions">
+                <a href="{{ url_for('auth.super_admin_subscription_enquiries') }}" class="hero-btn">
+                    <i class="fa-solid fa-file-signature"></i>
+                    Review Enquiries
+                </a>
+
+                <a href="{{ url_for('admin.company_management') }}" class="hero-btn-outline">
+                    <i class="fa-solid fa-building"></i>
+                    Company Management
+                </a>
+
+                <a href="{{ url_for('auth.super_admin_analytics') }}" class="hero-btn-outline">
+                    <i class="fa-solid fa-chart-line"></i>
+                    Platform Analytics
+                </a>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Companies</div>
+                <div class="stat-value">{{ total_companies|default(0) }}</div>
+                <div class="stat-sub">All registered companies on the platform.</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">Active Companies</div>
+                <div class="stat-value">{{ active_companies|default(0) }}</div>
+                <div class="stat-sub">Currently active and usable company accounts.</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">Pending Enquiries</div>
+                <div class="stat-value">{{ pending_enquiries|default(0) }}</div>
+                <div class="stat-sub">Waiting for payment proof verification.</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">Paid Subscriptions</div>
+                <div class="stat-value">{{ total_paid_subscriptions|default(0) }}</div>
+                <div class="stat-sub">Live paid plans currently running.</div>
+            </div>
+        </div>
+
+        <div class="sa-section-title">Core Modules</div>
+
+        <div class="module-grid">
+            <div class="dashboard-card">
+                <div class="dashboard-icon gradient-1">
+                    <i class="fa-solid fa-building"></i>
+                </div>
+                <h5>Create Company</h5>
+                <p>Create and manage company records, onboard new business accounts, and handle base setup.</p>
+                <a href="{{ url_for('admin.company_management') }}" class="flowra-btn-sm">Open Module</a>
+            </div>
+
+            <div class="dashboard-card">
+                <div class="dashboard-icon gradient-3">
+                    <i class="fa-solid fa-file-signature"></i>
+                </div>
+                <h5>Subscription Enquiries</h5>
+                <p>Review submitted paid-plan requests, check proof, and approve companies with admin credentials.</p>
+                <a href="{{ url_for('auth.super_admin_subscription_enquiries') }}" class="flowra-btn-sm">View Enquiries</a>
+            </div>
+
+            <div class="dashboard-card">
+                <div class="dashboard-icon gradient-2">
+                    <i class="fa-solid fa-chart-line"></i>
+                </div>
+                <h5>Analytics</h5>
+                <p>Track platform growth, companies, subscriptions, and overall business activity from one dashboard.</p>
+                <a href="{{ url_for('auth.super_admin_analytics') }}" class="flowra-btn-sm">View Analytics</a>
+            </div>
+
+            
+
+            <div class="dashboard-card">
+                <div class="dashboard-icon gradient-5">
+                    <i class="fa-solid fa-money-check-dollar"></i>
+                </div>
+                <h5>Payment Review</h5>
+                <p>Inspect screenshot-based payment proofs for manual UPI subscription requests before activation.</p>
+                <a href="{{ url_for('auth.super_admin_payment_review') }}" class="flowra-btn-sm">
+    Review Proofs
+</a>
+            </div>
+
+            <div class="dashboard-card">
+                <div class="dashboard-icon gradient-6">
+                    <i class="fa-solid fa-envelope-circle-check"></i>
+                </div>
+                <h5>Credentials Dispatch</h5>
+                <p>Send company admin credentials by email once payment is verified and account is approved.</p>
+                <a href="{{ url_for('auth.super_admin_dispatch') }}" class="flowra-btn-sm">Approve & Send</a>
+            </div>
+        </div>
+
+        <div class="info-row">
+            <div class="info-card">
+                <h4>Platform Control</h4>
+                <p>
+                    This dashboard is your central place to control onboarding, approve paid business subscriptions,
+                    manage company creation, and monitor the overall FLOWRA ecosystem.
+                </p>
+            </div>
+
+            <div class="info-card">
+                <h4>Quick Overview</h4>
+                <ul class="mini-list">
+                    <li><span>Total Admins</span><span>{{ total_admins|default(0) }}</span></li>
+                    <li><span>Converted Enquiries</span><span>{{ converted_enquiries|default(0) }}</span></li>
+                    <li><span>Trial Accounts</span><span>{{ total_trial_accounts|default(0) }}</span></li>
+                    <li><span>Starter Plans</span><span>{{ starter_count|default(0) }}</span></li>
+                    <li><span>Professional Plans</span><span>{{ professional_count|default(0) }}</span></li>
+                    <li><span>Enterprise Plans</span><span>{{ enterprise_count|default(0) }}</span></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,460 @@
+{% extends "base.html" %}
+{% block title %}Subscription Enquiries{% endblock %}
+
+{% block content %}
+<style>
+    .enquiry-page {
+        min-height: 100vh;
+        background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+        padding: 30px 0 50px;
+    }
+
+    .page-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+        border-radius: 24px;
+        padding: 26px;
+        color: #fff;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+        margin-bottom: 22px;
+    }
+
+    .page-hero h2 {
+        font-weight: 900;
+        margin-bottom: 8px;
+        font-size: 2rem;
+    }
+
+    .page-hero p {
+        color: #dbeafe;
+        margin-bottom: 0;
+        line-height: 1.7;
+        max-width: 760px;
+    }
+
+    .top-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 18px;
+    }
+
+    .flowra-btn {
+        background: #1453f3;
+        color: #fff;
+        border: none;
+        text-decoration: none;
+        padding: 11px 16px;
+        border-radius: 12px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .flowra-btn:hover {
+        color: #fff;
+        background: #0f46d8;
+    }
+
+    .flowra-btn-dark {
+        background: rgba(255,255,255,0.08);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,0.16);
+        text-decoration: none;
+        padding: 11px 16px;
+        border-radius: 12px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .flowra-btn-dark:hover {
+        color: #fff;
+        background: rgba(255,255,255,0.14);
+    }
+
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 22px;
+    }
+
+    .stat-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    }
+
+    .stat-label {
+        color: #6b7280;
+        font-size: 0.82rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 10px;
+    }
+
+    .stat-value {
+        font-size: 1.9rem;
+        font-weight: 900;
+        color: #111827;
+        line-height: 1;
+    }
+
+    .stat-sub {
+        margin-top: 8px;
+        color: #6b7280;
+        font-size: 0.84rem;
+        line-height: 1.55;
+    }
+
+    .enquiry-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 20px;
+        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.05);
+        overflow: hidden;
+    }
+
+    .table thead th {
+        background: #f8fafc;
+        font-size: 0.84rem;
+        font-weight: 900;
+        color: #374151;
+        border-bottom: 1px solid #e5e7eb;
+        white-space: nowrap;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        vertical-align: middle;
+    }
+
+    .table td {
+        vertical-align: top;
+        font-size: 0.92rem;
+        color: #374151;
+        padding-top: 14px;
+        padding-bottom: 14px;
+    }
+
+    .company-name {
+        font-weight: 800;
+        color: #111827;
+    }
+
+    .mini-text {
+        color: #6b7280;
+        font-size: 0.84rem;
+        line-height: 1.5;
+    }
+
+    .plan-badge,
+    .status-badge,
+    .cycle-badge,
+    .payment-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: capitalize;
+        white-space: nowrap;
+    }
+
+    .plan-badge {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .cycle-badge {
+        background: #f3e8ff;
+        color: #7c3aed;
+    }
+
+    .payment-paid {
+        background: #ecfdf5;
+        color: #166534;
+    }
+
+    .payment-pending {
+        background: #fff7ed;
+        color: #c2410c;
+    }
+
+    .status-pending {
+        background: #fff7ed;
+        color: #c2410c;
+    }
+
+    .status-approved,
+    .status-converted {
+        background: #ecfdf5;
+        color: #166534;
+    }
+
+    .status-rejected {
+        background: #fef2f2;
+        color: #b91c1c;
+    }
+
+    .proof-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        text-decoration: none;
+        font-weight: 800;
+        color: #1453f3;
+    }
+
+    .proof-link:hover {
+        color: #0f46d8;
+    }
+
+    .action-group {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .btn-approve,
+    .btn-paid {
+        border: none;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 0.82rem;
+        font-weight: 800;
+        cursor: pointer;
+        color: #fff;
+        white-space: nowrap;
+    }
+
+    .btn-approve {
+        background: #16a34a;
+    }
+
+    .btn-approve:hover {
+        background: #15803d;
+    }
+
+    .btn-paid {
+        background: #f59e0b;
+    }
+
+    .btn-paid:hover {
+        background: #d97706;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 46px 18px;
+        color: #6b7280;
+    }
+
+    .empty-state i {
+        font-size: 2rem;
+        color: #cbd5e1;
+        margin-bottom: 10px;
+        display: block;
+    }
+
+    @media (max-width: 1100px) {
+        .stats-row {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 767px) {
+        .stats-row {
+            grid-template-columns: 1fr;
+        }
+
+        .page-hero h2 {
+            font-size: 1.6rem;
+        }
+    }
+</style>
+
+<div class="enquiry-page">
+    <div class="container">
+
+        <div class="page-hero">
+            <h2>Subscription Enquiries</h2>
+            <p>
+                Review paid-plan requests, inspect payment proof, mark proof as paid, and then convert valid enquiries into company admin accounts.
+            </p>
+
+            <div class="top-actions">
+                <a href="{{ url_for('auth.export_subscription_enquiries') }}" class="flowra-btn">
+                    <i class="fa-solid fa-file-excel"></i>
+                    Export Excel
+                </a>
+
+                <a href="{{ url_for('auth.super_admin_dashboard') }}" class="flowra-btn-dark">
+                    <i class="fa-solid fa-arrow-left"></i>
+                    Back to Dashboard
+                </a>
+            </div>
+        </div>
+
+        {% set pending_count = enquiries | selectattr("status", "equalto", "pending") | list | length %}
+        {% set converted_count = enquiries | selectattr("status", "equalto", "converted") | list | length %}
+        {% set approved_count = enquiries | selectattr("status", "equalto", "approved") | list | length %}
+        {% set rejected_count = enquiries | selectattr("status", "equalto", "rejected") | list | length %}
+
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-label">Total Enquiries</div>
+                <div class="stat-value">{{ enquiries|length }}</div>
+                <div class="stat-sub">All subscription requests.</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">Pending</div>
+                <div class="stat-value">{{ pending_count }}</div>
+                <div class="stat-sub">Need proof verification.</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">Converted</div>
+                <div class="stat-value">{{ converted_count + approved_count }}</div>
+                <div class="stat-sub">Companies created successfully.</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">Rejected</div>
+                <div class="stat-value">{{ rejected_count }}</div>
+                <div class="stat-sub">Invalid or cancelled requests.</div>
+            </div>
+        </div>
+
+        <div class="enquiry-card">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Company</th>
+                            <th>Contact</th>
+                            <th>Plan</th>
+                            <th>Cycle</th>
+                            <th>Payment Proof</th>
+                            <th>Payment</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th style="min-width: 190px;">Actions</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% if enquiries %}
+                            {% for enquiry in enquiries %}
+                                {% set current_status = enquiry.status or 'pending' %}
+                                {% set pay_status = enquiry.payment_status or 'pending' %}
+
+                                <tr>
+                                    <td><strong>#{{ enquiry.id }}</strong></td>
+
+                                    <td>
+                                        <div class="company-name">{{ enquiry.company_name }}</div>
+                                        <div class="mini-text">GST: {{ enquiry.gst_number or '-' }}</div>
+                                        <div class="mini-text">Referral: {{ enquiry.referral_code or '-' }}</div>
+                                    </td>
+
+                                    <td>
+                                        <div><strong>{{ enquiry.contact_person }}</strong></div>
+                                        <div class="mini-text">{{ enquiry.email }}</div>
+                                        <div class="mini-text">{{ enquiry.phone }}</div>
+                                        {% if enquiry.message %}
+                                            <div class="mini-text mt-1">Msg: {{ enquiry.message }}</div>
+                                        {% endif %}
+                                    </td>
+
+                                    <td>
+                                        <span class="plan-badge">{{ enquiry.preferred_plan or '-' }}</span>
+                                    </td>
+
+                                    <td>
+                                        <span class="cycle-badge">{{ enquiry.billing_cycle or 'monthly' }}</span>
+                                    </td>
+
+                                    <td>
+                                        {% if enquiry.payment_screenshot %}
+                                            <a href="{{ url_for('static', filename='uploads/payment_screenshots/' ~ enquiry.payment_screenshot) }}"
+                                               target="_blank"
+                                               class="proof-link">
+                                                <i class="fa-solid fa-eye"></i>
+                                                View Proof
+                                            </a>
+                                        {% else %}
+                                            <span class="mini-text">No proof uploaded</span>
+                                        {% endif %}
+                                    </td>
+
+                                    <td>
+                                        <span class="payment-badge {% if pay_status == 'paid' %}payment-paid{% else %}payment-pending{% endif %}">
+                                            {{ pay_status }}
+                                        </span>
+                                    </td>
+
+                                    <td>
+                                        <span class="status-badge
+                                            {% if current_status == 'pending' %}status-pending
+                                            {% elif current_status in ['approved', 'converted'] %}status-converted
+                                            {% elif current_status == 'rejected' %}status-rejected
+                                            {% else %}status-pending{% endif %}">
+                                            {{ current_status }}
+                                        </span>
+                                    </td>
+
+                                    <td>
+                                        <div>{{ enquiry.created_at }}</div>
+                                    </td>
+
+                                    <td>
+                                        {% if current_status == 'pending' %}
+                                            <div class="action-group">
+                                                {% if pay_status != 'paid' %}
+                                                    <form method="POST" action="{{ url_for('auth.mark_as_paid', enquiry_id=enquiry.id) }}">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <button type="submit" class="btn-paid">
+                                                            Mark as Paid
+                                                        </button>
+                                                    </form>
+                                                {% else %}
+                                                    <form method="POST" action="{{ url_for('auth.convert_subscription_enquiry', enquiry_id=enquiry.id) }}">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <button type="submit" class="btn-approve">
+                                                            Approve / Convert
+                                                        </button>
+                                                    </form>
+                                                {% endif %}
+                                            </div>
+                                        {% else %}
+                                            <span class="mini-text">Processed</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="10">
+                                    <div class="empty-state">
+                                        <i class="fa-regular fa-folder-open"></i>
+                                        No subscription enquiries found.
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

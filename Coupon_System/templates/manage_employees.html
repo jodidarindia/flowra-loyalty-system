@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Manage Employees{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+
+    <!-- NAVBAR -->
+    <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- MAIN LAYOUT -->
+    <div class="container-fluid py-4 px-4">
+        <div class="row g-4">
+
+            <!-- SIDEBAR -->
+            <div class="col-lg-3 col-xl-2">
+                <div class="dashboard-sidebar">
+
+                    <div class="sidebar-brand">
+                        <h5>{{ session['company_name'] }}</h5>
+                        <p>Admin Control Panel</p>
+                    </div>
+
+                    <div class="sidebar-menu">
+                        <a href="{{ url_for('admin.company_admin_dashboard') }}" class="sidebar-link">
+                            <i class="fa-solid fa-house"></i> Dashboard
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_employees_page') }}" class="sidebar-link active">
+                            <i class="fa-solid fa-user-plus"></i> Employees
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_distributors_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-truck"></i> Distributors
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_retailers_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-shop"></i> Retailers
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_mechanics_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-screwdriver-wrench"></i> Mechanics
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_products_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-box-open"></i> Products
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_catalogues_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-book-open"></i> Catalogues
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_analytics') }}" class="sidebar-link">
+                            <i class="fa-solid fa-chart-line"></i> Analytics
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_history') }}" class="sidebar-link">
+                            <i class="fa-solid fa-clock-rotate-left"></i> History
+                        </a>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- CONTENT -->
+            <div class="col-lg-9 col-xl-10">
+
+                <div class="dashboard-header mb-4">
+                    <h2>Manage Employees</h2>
+                    <p class="text-muted">Create and manage employees of your company</p>
+                </div>
+
+                <div class="row g-4">
+
+                    <!-- CREATE FORM -->
+                    <div class="col-lg-4">
+                        <div class="company-form-card">
+                            <h4>Create Employee</h4>
+
+                            <form method="POST" action="{{ url_for('admin.manage_employees') }}">
+                                
+                                <!-- ✅ CSRF FIX -->
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                                <div class="mb-3">
+                                    <label class="form-label">Name</label>
+                                    <input type="text" name="name" class="form-control modern-input" required>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label>Email</label>
+                                    <input type="email" name="email" class="form-control modern-input" required>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label>Password</label>
+                                    <input type="password" name="password" class="form-control modern-input" required>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label>Role</label>
+                                    <select name="role" class="form-select modern-input">
+                                        <option value="qr_employee">QR Employee</option>
+                                        <option value="redeem_employee">Redeem Employee</option> <!-- ✅ added -->
+                                        <option value="employee">General Employee</option>
+                                        <option value="sales">Salesman</option>
+                                    </select>
+                                </div>
+
+                                <button type="submit" class="btn flowra-btn w-100">Create Employee</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- EMPLOYEE TABLE -->
+                    <div class="col-lg-8">
+                        <div class="company-table-card">
+                            <h4>Employee List</h4>
+
+                            <div class="table-responsive mt-4">
+                                <table class="table align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Email</th>
+                                            <th>Role</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+
+                                    <tbody>
+                                        {% for emp in employees %}
+                                        <tr>
+                                            <td>{{ emp[1] }}</td>
+                                            <td>{{ emp[2] }}</td>
+                                            <td>{{ emp[3] }}</td>
+                                            <td>
+                                                <a href="{{ url_for('admin.edit_employee', employee_id=emp[0]) }}" class="btn btn-sm btn-primary">Edit</a>
+
+                                                <!-- ✅ DELETE CSRF FIX -->
+                                                <form method="POST" action="{{ url_for('admin.delete_employee', employee_id=emp[0]) }}" style="display:inline;">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                    <button class="btn btn-sm btn-danger">Delete</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                        {% else %}
+                                        <tr>
+                                            <td colspan="4" class="text-center text-muted py-4">
+                                                No employees found
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

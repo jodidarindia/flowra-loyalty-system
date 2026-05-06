@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Redemption History{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <div class="container py-5">
+        <div class="dashboard-header mb-4">
+            <h2>Redemption History</h2>
+            <p>All invoice-based redemptions.</p>
+        </div>
+
+        <div class="company-table-card">
+            <div class="table-responsive">
+                <table class="table align-middle company-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Dealer</th>
+                            <th>Invoice No</th>
+                            <th>Type</th>
+                            <th>Part No</th>
+                            <th>Product</th>
+                            <th>Sets</th>
+                            <th>Coupons</th>
+                            <th>Redeemed Points</th>
+                            <th>Remarks</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in redemptions %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ r[1] }}</td>
+                            <td>{{ r[2] }}</td>
+                            <td>{{ r[3] }}</td>
+                            <td>{{ r[4] or '-' }}</td>
+                            <td>{{ r[5] or '-' }}</td>
+                            <td>{{ r[6] }}</td>
+                            <td>{{ r[7] }}</td>
+                            <td>{{ r[8] }}</td>
+                            <td>{{ r[9] or '-' }}</td>
+                            <td>{{ r[10] }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="11" class="text-center py-4 text-muted">No redemption history found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

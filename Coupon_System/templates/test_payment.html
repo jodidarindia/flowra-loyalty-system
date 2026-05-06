@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Payment</title>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+
+<h2>Test Razorpay Payment</h2>
+
+<button onclick="payNow()">Pay ₹1</button>
+
+<script>
+function payNow() {
+    var options = {
+        key: "rzp_test_xxxxxxxxx",  // 👈 same key
+        amount: 100, // ₹1 (paisa)
+        currency: "INR",
+        name: "FLOWRA",
+        description: "Test Payment",
+
+        handler: function (response) {
+            alert("Payment Successful: " + response.razorpay_payment_id);
+        }
+    };
+
+    var rzp = new Razorpay(options);
+    rzp.open();
+}
+</script>
+
+</body>
+</html>

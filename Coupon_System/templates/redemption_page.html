@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Redeem Points{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <div class="container py-5">
+        <div class="dashboard-header mb-4">
+            <h2>Redeem Points</h2>
+            <p>Redeem points using invoice number.</p>
+        </div>
+
+        <div class="company-form-card mx-auto" style="max-width:900px;">
+            <form method="POST" action="{{ url_for('admin.redeem_points') }}">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Dealer</label>
+                        <select name="dealer_id" class="form-select modern-input" required>
+                            {% for d in dealers %}
+                            <option value="{{ d[0] }}">{{ d[1] }} - {{ d[2] or '' }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Invoice No.</label>
+                        <input type="text" name="invoice_no" class="form-control modern-input" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Redemption Type</label>
+                        <select name="redemption_type" class="form-select modern-input" required>
+                            <option value="set">Set Based</option>
+                            <option value="manual">Manual</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Part No</label>
+                        <input type="text" name="part_no" class="form-control modern-input">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Product Name</label>
+                        <input type="text" name="product_name" class="form-control modern-input">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Sets Count</label>
+                        <input type="number" name="sets_count" class="form-control modern-input" value="0" min="0">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Manual Points</label>
+                        <input type="number" name="manual_points" class="form-control modern-input" value="0" min="0">
+                    </div>
+
+                    <div class="col-md-12">
+                        <label class="form-label">Remarks</label>
+                        <textarea name="remarks" class="form-control modern-input"></textarea>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn flowra-btn mt-4 w-100">Redeem Points</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Dealer Orders{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <nav class="navbar navbar-expand-lg custom-navbar px-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <img src="{{ url_for('static', filename='images/flowra.jpeg') }}" alt="FLOWRA" class="nav-logo">
+                <span class="brand-text">FLOWRA</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-3">
+                <span class="welcome-text">Welcome, {{ session['user_name'] }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm px-3">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <div class="row g-4">
+
+            <!-- Sidebar -->
+            <div class="col-lg-3 col-xl-2">
+                <div class="dashboard-sidebar">
+                    <div class="sidebar-brand">
+                        <h5>{{ session['company_name'] }}</h5>
+                        <p>Salesman Control Panel</p>
+                    </div>
+
+                    <div class="sidebar-menu">
+                        <a href="{{ url_for('admin.salesman_dashboard') }}" class="sidebar-link">
+                            <i class="fa-solid fa-house"></i>
+                            <span>Dashboard</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.company_admin_distributors_page') }}" class="sidebar-link">
+                            <i class="fa-solid fa-truck"></i>
+                            <span>My Dealers</span>
+                        </a>
+
+                        <a href="{{ url_for('admin.salesman_orders') }}" class="sidebar-link active">
+                            <i class="fa-solid fa-cart-shopping"></i>
+                            <span>Orders</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-lg-9 col-xl-10">
+
+                <div class="dashboard-header mb-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div>
+                        <h2>Dealer Orders</h2>
+                        <p>Orders created by you.</p>
+                    </div>
+
+                    <a href="{{ url_for('admin.salesman_create_order') }}" class="btn flowra-btn-sm">
+                        <i class="fa-solid fa-plus me-1"></i> Create Order
+                    </a>
+                </div>
+
+                <div class="company-table-card">
+                    <div class="table-responsive">
+                        <table class="table align-middle company-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Order No</th>
+                                    <th>Dealer</th>
+                                    <th>Part No</th>
+                                    <th>Part Name</th>
+                                    <th>Status</th>
+                                    <th>Total Amount</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for o in orders %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ o[1] }}</td>
+                                    <td>{{ o[2] }}</td>
+                                    <td>{{ o[3] or '-' }}</td>
+                                    <td>{{ o[4] or '-' }}</td>
+                                    <td>
+                                        {% if o[5]|lower == 'pending' %}
+                                            <span class="status-badge inactive-badge">Pending</span>
+                                        {% elif o[5]|lower == 'completed' %}
+                                            <span class="status-badge active-badge">Completed</span>
+                                        {% else %}
+                                            <span class="status-badge">{{ o[5] }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>₹ {{ o[6] }}</td>
+                                    <td>{{ o[7] }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="8" class="text-center py-4 text-muted">No orders found.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
