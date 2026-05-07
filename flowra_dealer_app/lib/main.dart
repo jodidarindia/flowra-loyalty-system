@@ -70,9 +70,6 @@ class AppGradients {
   );
 }
 
-
-
-
 class MyHttpOverrides extends HttpOverrides {
   @override
   HttpClient createHttpClient(SecurityContext? context) {
@@ -81,8 +78,6 @@ class MyHttpOverrides extends HttpOverrides {
           (X509Certificate cert, String host, int port) => true;
   }
 }
-
-
 
 class ApiService {
   static const String baseUrl = "https://192.168.1.13:5000";
@@ -95,7 +90,6 @@ class ApiService {
     if (json) headers["Content-Type"] = "application/json";
     if (token.isNotEmpty) headers["Authorization"] = "Bearer $token";
     return headers;
-    
   }
 
   static String normalizeImageUrl(String value) {
@@ -121,7 +115,7 @@ class ApiService {
     return _decodeMap(response.body, "Server returned invalid login response");
   }
 
-  static Future<Map<String, dynamic>> dealerLogout(int dealerId) async {
+  static Future<Map<String, dynamic>> dealerLogout(String dealerId) async {
     final response = await http.post(
       Uri.parse("$baseUrl/api/dealer/logout"),
       headers: await _authHeaders(json: true),
@@ -130,7 +124,7 @@ class ApiService {
     return _decodeMap(response.body, "Server returned invalid logout response");
   }
 
-  static Future<Map<String, dynamic>> getWallet(int dealerId) async {
+  static Future<Map<String, dynamic>> getWallet(String dealerId) async {
     final response = await http.get(
       Uri.parse("$baseUrl/api/dealer/wallet/$dealerId"),
       headers: await _authHeaders(),
@@ -139,18 +133,20 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> scanCoupon(
-    String code,
-    int dealerId,
-  ) async {
+  String code,
+  String dealerId,
+) async {
     final response = await http.post(
-      Uri.parse("$baseUrl/api/dealer/scan/${Uri.encodeComponent(code)}/$dealerId"),
+      Uri.parse(
+        "$baseUrl/api/dealer/scan/${Uri.encodeComponent(code)}/$dealerId",
+      ),
       headers: await _authHeaders(),
     );
     return _decodeMap(response.body, "Server returned invalid scan response");
   }
 
   static Future<Map<String, dynamic>> getScannedHistory(
-    int dealerId, {
+  String dealerId, {
     String? fromDate,
     String? toDate,
   }) async {
@@ -173,10 +169,13 @@ class ApiService {
       Uri.parse(url),
       headers: await _authHeaders(),
     );
-    return _decodeMap(response.body, "Server returned invalid history response");
+    return _decodeMap(
+      response.body,
+      "Server returned invalid history response",
+    );
   }
 
-  static Future<Map<String, dynamic>> getSets(int dealerId) async {
+  static Future<Map<String, dynamic>> getSets(String dealerId) async {
     final response = await http.get(
       Uri.parse("$baseUrl/api/dealer/sets/$dealerId"),
       headers: await _authHeaders(),
@@ -184,7 +183,7 @@ class ApiService {
     return _decodeMap(response.body, "Server returned invalid sets response");
   }
 
-  static Future<Map<String, dynamic>> getRedemptionHistory(int dealerId) async {
+  static Future<Map<String, dynamic>> getRedemptionHistory(String dealerId) async {
     final response = await http.get(
       Uri.parse("$baseUrl/api/dealer/redemption-history/$dealerId"),
       headers: await _authHeaders(),
@@ -195,7 +194,7 @@ class ApiService {
     );
   }
 
-  static Future<List<dynamic>> getDealerBanners(int dealerId) async {
+  static Future<List<dynamic>> getDealerBanners(String dealerId) async {
     final response = await http.get(
       Uri.parse("$baseUrl/api/dealer/banners/$dealerId"),
       headers: await _authHeaders(),
@@ -211,7 +210,7 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> uploadDealerProfileImage(
-    int dealerId,
+  String dealerId,
     File imageFile,
   ) async {
     final prefs = await SharedPreferences.getInstance();
@@ -227,10 +226,7 @@ class ApiService {
     }
 
     request.files.add(
-      await http.MultipartFile.fromPath(
-        "profile_image",
-        imageFile.path,
-      ),
+      await http.MultipartFile.fromPath("profile_image", imageFile.path),
     );
 
     final streamedResponse = await request.send();
@@ -311,13 +307,15 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 1500),
     );
 
-    _scale = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
-    );
+    _scale = Tween<double>(
+      begin: 0.6,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
 
-    _opacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
-    );
+    _opacity = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
 
     _controller.forward();
     goNext();
@@ -325,7 +323,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> goNext() async {
     final prefs = await SharedPreferences.getInstance();
-    final dealerId = prefs.getInt("dealer_id");
+    final dealerId = prefs.getString("dealer_id");
 
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
@@ -369,7 +367,7 @@ class _SplashScreenState extends State<SplashScreen>
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.white.withValues(alpha:0.30),
+                          color: Colors.white.withValues(alpha: 0.30),
                           blurRadius: 30,
                           spreadRadius: 4,
                         ),
@@ -423,7 +421,7 @@ class _DashboardLoaderState extends State<DashboardLoader> {
   Future<void> loadDealer() async {
     final prefs = await SharedPreferences.getInstance();
     final dealer = {
-      "id": prefs.getInt("dealer_id"),
+      "id": prefs.getString("dealer_id"),
       "dealer_code": prefs.getString("dealer_code"),
       "name": prefs.getString("dealer_name"),
       "mobile": prefs.getString("dealer_mobile"),
@@ -484,7 +482,7 @@ class _LoginScreenState extends State<LoginScreen> {
         final dealer = data["dealer"] ?? {};
 
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setInt("dealer_id", dealer["id"] ?? 0);
+        await prefs.setString("dealer_id", dealer["id"].toString());
         await prefs.setString("dealer_code", dealer["dealer_code"] ?? "");
         await prefs.setString("dealer_name", dealer["name"] ?? "");
         await prefs.setString("dealer_mobile", dealer["mobile"] ?? "");
@@ -494,9 +492,12 @@ class _LoginScreenState extends State<LoginScreen> {
         await prefs.setString("dealer_gst", dealer["gst"] ?? "");
         await prefs.setString("dealer_pan", dealer["pan"] ?? "");
         await prefs.setString("dealer_address", dealer["address"] ?? "");
-        await prefs.setString("dealer_profile_image", dealer["profile_image"] ?? "");
+        await prefs.setString(
+          "dealer_profile_image",
+          dealer["profile_image"] ?? "",
+        );
         await prefs.setString("dealer_token", data["token"] ?? "");
-    
+
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
@@ -509,9 +510,9 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Connection error: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Connection error: $e")));
     }
 
     if (mounted) setState(() => loading = false);
@@ -585,16 +586,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           height: 52,
                           child: ElevatedButton(
                             onPressed: loading ? null : login,
-                            child: loading
-                                ? const SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Text("Login"),
+                            child:
+                                loading
+                                    ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                    : const Text("Login"),
                           ),
                         ),
                       ],
@@ -609,8 +611,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-
-
 
 class DashboardScreen extends StatefulWidget {
   final Map dealer;
@@ -648,24 +648,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> logout(BuildContext context) async {
-  final prefs = await SharedPreferences.getInstance();
-  final dealerId = prefs.getInt("dealer_id");
+    final prefs = await SharedPreferences.getInstance();
+    final dealerId = prefs.getString("dealer_id");
 
-  try {
-    if (dealerId != null) {
-      await ApiService.dealerLogout(dealerId);
-    }
-  } catch (_) {}
+    try {
+      if (dealerId != null) {
+        await ApiService.dealerLogout(dealerId);
+      }
+    } catch (_) {}
 
-  await prefs.clear();
+    await prefs.clear();
 
-  if (!context.mounted) return;
-  Navigator.pushAndRemoveUntil(
-    context,
-    MaterialPageRoute(builder: (_) => const LoginScreen()),
-    (route) => false,
-  );
-}
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
 
   Widget bannerSection() {
     if (bannerLoading) {
@@ -757,7 +757,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ? "Not Available"
             : widget.dealer["city"].toString();
 
-    final profileImage = (widget.dealer["profile_image"] ?? "").toString().trim();
+    final profileImage =
+        (widget.dealer["profile_image"] ?? "").toString().trim();
 
     return InkWell(
       borderRadius: BorderRadius.circular(24),
@@ -790,9 +791,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               backgroundColor: Colors.white.withValues(alpha: 0.20),
               backgroundImage:
                   profileImage.isNotEmpty ? NetworkImage(profileImage) : null,
-              child: profileImage.isEmpty
-                  ? const Icon(Icons.person, color: Colors.white, size: 30)
-                  : null,
+              child:
+                  profileImage.isEmpty
+                      ? const Icon(Icons.person, color: Colors.white, size: 30)
+                      : null,
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -907,7 +909,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         decoration: BoxDecoration(
           color: const Color(0xFFF3F5FB),
           gradient: LinearGradient(
-            colors: [Colors.white, const Color(0xFFEEF2FF).withValues(alpha: 0.80)],
+            colors: [
+              Colors.white,
+              const Color(0xFFEEF2FF).withValues(alpha: 0.80),
+            ],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -1104,23 +1109,19 @@ class _DealerProfileScreenState extends State<DealerProfileScreen> {
         setState(() {});
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(data["message"] ?? "Profile image updated"),
-          ),
+          SnackBar(content: Text(data["message"] ?? "Profile image updated")),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(data["message"] ?? "Upload failed"),
-          ),
+          SnackBar(content: Text(data["message"] ?? "Upload failed")),
         );
       }
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Upload error: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Upload error: $e")));
     } finally {
       if (mounted) {
         setState(() => uploading = false);
@@ -1224,16 +1225,18 @@ class _DealerProfileScreenState extends State<DealerProfileScreen> {
                         CircleAvatar(
                           radius: 50,
                           backgroundColor: Colors.white.withValues(alpha: 0.20),
-                          backgroundImage: profileImage.isNotEmpty
-                              ? NetworkImage(profileImage)
-                              : null,
-                          child: profileImage.isEmpty
-                              ? const Icon(
-                                  Icons.person,
-                                  size: 45,
-                                  color: Colors.white,
-                                )
-                              : null,
+                          backgroundImage:
+                              profileImage.isNotEmpty
+                                  ? NetworkImage(profileImage)
+                                  : null,
+                          child:
+                              profileImage.isEmpty
+                                  ? const Icon(
+                                    Icons.person,
+                                    size: 45,
+                                    color: Colors.white,
+                                  )
+                                  : null,
                         ),
                         Positioned(
                           right: 0,
@@ -1250,19 +1253,20 @@ class _DealerProfileScreenState extends State<DealerProfileScreen> {
                                   width: 2,
                                 ),
                               ),
-                              child: uploading
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
+                              child:
+                                  uploading
+                                      ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                      : const Icon(
+                                        Icons.camera_alt,
+                                        size: 18,
+                                        color: Color(0xFF2563EB),
                                       ),
-                                    )
-                                  : const Icon(
-                                      Icons.camera_alt,
-                                      size: 18,
-                                      color: Color(0xFF2563EB),
-                                    ),
                             ),
                           ),
                         ),
@@ -1448,7 +1452,10 @@ class _ScanScreenState extends State<ScanScreen>
     });
 
     try {
-      final data = await ApiService.scanCoupon(cleanedCode, widget.dealer["id"]);
+      final data = await ApiService.scanCoupon(
+        cleanedCode,
+        widget.dealer["id"],
+      );
 
       if (!mounted) return;
 
@@ -1488,9 +1495,9 @@ class _ScanScreenState extends State<ScanScreen>
     final code = manualCodeController.text.trim().toUpperCase();
 
     if (code.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter coupon code")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please enter coupon code")));
       return;
     }
 
@@ -1511,9 +1518,10 @@ class _ScanScreenState extends State<ScanScreen>
                 width: 110,
                 height: 110,
                 decoration: BoxDecoration(
-                  color: scanSuccess
-                      ? Colors.green.withValues(alpha: 0.92)
-                      : Colors.red.withValues(alpha: 0.92),
+                  color:
+                      scanSuccess
+                          ? Colors.green.withValues(alpha: 0.92)
+                          : Colors.red.withValues(alpha: 0.92),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
@@ -1570,32 +1578,32 @@ class _ScanScreenState extends State<ScanScreen>
       height: 42,
       decoration: BoxDecoration(
         border: Border(
-          top: isBottom
-              ? BorderSide.none
-              : const BorderSide(color: Colors.white, width: 5),
-          bottom: isBottom
-              ? const BorderSide(color: Colors.white, width: 5)
-              : BorderSide.none,
-          left: isRight
-              ? BorderSide.none
-              : const BorderSide(color: Colors.white, width: 5),
-          right: isRight
-              ? const BorderSide(color: Colors.white, width: 5)
-              : BorderSide.none,
+          top:
+              isBottom
+                  ? BorderSide.none
+                  : const BorderSide(color: Colors.white, width: 5),
+          bottom:
+              isBottom
+                  ? const BorderSide(color: Colors.white, width: 5)
+                  : BorderSide.none,
+          left:
+              isRight
+                  ? BorderSide.none
+                  : const BorderSide(color: Colors.white, width: 5),
+          right:
+              isRight
+                  ? const BorderSide(color: Colors.white, width: 5)
+                  : BorderSide.none,
         ),
         borderRadius: BorderRadius.only(
-          topLeft: !isRight && !isBottom
-              ? const Radius.circular(18)
-              : Radius.zero,
-          topRight: isRight && !isBottom
-              ? const Radius.circular(18)
-              : Radius.zero,
-          bottomLeft: !isRight && isBottom
-              ? const Radius.circular(18)
-              : Radius.zero,
-          bottomRight: isRight && isBottom
-              ? const Radius.circular(18)
-              : Radius.zero,
+          topLeft:
+              !isRight && !isBottom ? const Radius.circular(18) : Radius.zero,
+          topRight:
+              isRight && !isBottom ? const Radius.circular(18) : Radius.zero,
+          bottomLeft:
+              !isRight && isBottom ? const Radius.circular(18) : Radius.zero,
+          bottomRight:
+              isRight && isBottom ? const Radius.circular(18) : Radius.zero,
         ),
       ),
     );
@@ -1622,10 +1630,7 @@ class _ScanScreenState extends State<ScanScreen>
         children: [
           const Text(
             "QR damaged? Enter manual code",
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 10),
           TextField(
@@ -1648,10 +1653,11 @@ class _ScanScreenState extends State<ScanScreen>
             onChanged: (value) {
               final upper = value.toUpperCase();
               if (value != upper) {
-                manualCodeController.value = manualCodeController.value.copyWith(
-                  text: upper,
-                  selection: TextSelection.collapsed(offset: upper.length),
-                );
+                manualCodeController.value = manualCodeController.value
+                    .copyWith(
+                      text: upper,
+                      selection: TextSelection.collapsed(offset: upper.length),
+                    );
               }
             },
             onSubmitted: (_) {
@@ -1718,11 +1724,12 @@ class _ScanScreenState extends State<ScanScreen>
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: showScanAnimation
-                    ? (scanSuccess
-                          ? const [Color(0xFF16A34A), Color(0xFF22C55E)]
-                          : const [Color(0xFFDC2626), Color(0xFFEF4444)])
-                    : const [Color(0xFF2563EB), Color(0xFF7C3AED)],
+                colors:
+                    showScanAnimation
+                        ? (scanSuccess
+                            ? const [Color(0xFF16A34A), Color(0xFF22C55E)]
+                            : const [Color(0xFFDC2626), Color(0xFFEF4444)])
+                        : const [Color(0xFF2563EB), Color(0xFF7C3AED)],
               ),
               borderRadius: BorderRadius.circular(18),
             ),
@@ -1787,10 +1794,11 @@ class _WalletScreenState extends State<WalletScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => WalletDetailsScreen(
-              totalPoints: totalPoints,
-              partPoints: partPoints,
-            ),
+            builder:
+                (_) => WalletDetailsScreen(
+                  totalPoints: totalPoints,
+                  partPoints: partPoints,
+                ),
           ),
         );
       },
@@ -1901,24 +1909,25 @@ class _WalletScreenState extends State<WalletScreen> {
           decoration: const BoxDecoration(gradient: AppGradients.wallet),
         ),
       ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: loadWallet,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  totalPointsCard(),
-                  if (partPoints.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 30),
-                      child: Center(child: Text("No points found")),
-                    )
-                  else
-                    ...partPoints.map((e) => partCard(e as Map)),
-                ],
+      body:
+          loading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                onRefresh: loadWallet,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    totalPointsCard(),
+                    if (partPoints.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 30),
+                        child: Center(child: Text("No points found")),
+                      )
+                    else
+                      ...partPoints.map((e) => partCard(e as Map)),
+                  ],
+                ),
               ),
-            ),
     );
   }
 }
@@ -2099,9 +2108,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to load history: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Failed to load history: $e")));
     }
   }
 
@@ -2158,8 +2167,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.calendar_today_outlined,
-                  size: 20, color: Color(0xFF6B7280)),
+              const Icon(
+                Icons.calendar_today_outlined,
+                size: 20,
+                color: Color(0xFF6B7280),
+              ),
               const SizedBox(width: 10),
               Flexible(
                 child: Text(
@@ -2244,10 +2256,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
               child: const Text(
                 "Apply Filter",
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                ),
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
               ),
             ),
           ),
@@ -2275,7 +2284,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final scannedAt = (item["scanned_at"] ?? "-").toString();
 
     final statusColor =
-        status == "redeemed" ? const Color(0xFFDB2777) : const Color(0xFF16A34A);
+        status == "redeemed"
+            ? const Color(0xFFDB2777)
+            : const Color(0xFF16A34A);
     final statusText = status.isEmpty ? "NA" : status.toUpperCase();
 
     return Container(
@@ -2338,10 +2349,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 const SizedBox(height: 16),
                 Text(
                   "Part No: $partNo",
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 4),
-                Text("Product: $productName", style: const TextStyle(fontSize: 16)),
+                Text(
+                  "Product: $productName",
+                  style: const TextStyle(fontSize: 16),
+                ),
                 const SizedBox(height: 4),
                 Text("Points: $points", style: const TextStyle(fontSize: 16)),
                 const SizedBox(height: 4),
@@ -2365,24 +2382,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
           decoration: const BoxDecoration(gradient: AppGradients.history),
         ),
       ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: loadHistory,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  filterCard(),
-                  if (history.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 40),
-                      child: Center(child: Text("No history found")),
-                    )
-                  else
-                    ...history.map((e) => historyItem(e as Map)),
-                ],
+      body:
+          loading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                onRefresh: loadHistory,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    filterCard(),
+                    if (history.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 40),
+                        child: Center(child: Text("No history found")),
+                      )
+                    else
+                      ...history.map((e) => historyItem(e as Map)),
+                  ],
+                ),
               ),
-            ),
     );
   }
 }
@@ -2416,9 +2434,9 @@ class _SetSummaryScreenState extends State<SetSummaryScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to load sets: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Failed to load sets: $e")));
     }
   }
 
@@ -2512,23 +2530,24 @@ class _SetSummaryScreenState extends State<SetSummaryScreen> {
           decoration: const BoxDecoration(gradient: AppGradients.sets),
         ),
       ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: loadSets,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  if (sets.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 40),
-                      child: Center(child: Text("No set data found")),
-                    )
-                  else
-                    ...sets.map((e) => setCard(e as Map)),
-                ],
+      body:
+          loading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                onRefresh: loadSets,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (sets.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 40),
+                        child: Center(child: Text("No set data found")),
+                      )
+                    else
+                      ...sets.map((e) => setCard(e as Map)),
+                  ],
+                ),
               ),
-            ),
     );
   }
 }
@@ -2570,63 +2589,65 @@ class _RedemptionHistoryScreenState extends State<RedemptionHistoryScreen> {
   }
 
   Widget redemptionCard(Map item) {
-  final redeemedBy = (item["redeemed_by"] ?? "-").toString().trim().isEmpty
-      ? "-"
-      : item["redeemed_by"].toString();
+    final redeemedBy =
+        (item["redeemed_by"] ?? "-").toString().trim().isEmpty
+            ? "-"
+            : item["redeemed_by"].toString();
 
-  final redeemedAt = (item["redeemed_at"] ?? "").toString().trim().isEmpty
-      ? "-"
-      : item["redeemed_at"].toString();
+    final redeemedAt =
+        (item["redeemed_at"] ?? "").toString().trim().isEmpty
+            ? "-"
+            : item["redeemed_at"].toString();
 
-  return Container(
-    margin: const EdgeInsets.only(bottom: 16),
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(22),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 14,
-          offset: const Offset(0, 5),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "Redeemed By: $redeemedBy",
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: Colors.black87,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
           ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          "Part No: ${item["part_no"] ?? "-"}",
-          style: const TextStyle(fontSize: 16, color: Colors.black87),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          "Product: ${item["product_name"] ?? "-"}",
-          style: const TextStyle(fontSize: 16, color: Colors.black87),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          "Points: ${item["points"] ?? 0}",
-          style: const TextStyle(fontSize: 16, color: Colors.black87),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          "Redeemed At: $redeemedAt",
-          style: const TextStyle(fontSize: 16, color: Colors.black87),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Redeemed By: $redeemedBy",
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Part No: ${item["part_no"] ?? "-"}",
+            style: const TextStyle(fontSize: 16, color: Colors.black87),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Product: ${item["product_name"] ?? "-"}",
+            style: const TextStyle(fontSize: 16, color: Colors.black87),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Points: ${item["points"] ?? 0}",
+            style: const TextStyle(fontSize: 16, color: Colors.black87),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Redeemed At: $redeemedAt",
+            style: const TextStyle(fontSize: 16, color: Colors.black87),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2639,25 +2660,32 @@ class _RedemptionHistoryScreenState extends State<RedemptionHistoryScreen> {
           decoration: const BoxDecoration(gradient: AppGradients.redemptions),
         ),
       ),
-      body: loading
-    ? const Center(child: CircularProgressIndicator())
-    : RefreshIndicator(
-        onRefresh: loadRedemptions,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: redemptions.isEmpty
-              ? const [
-                  Padding(
-                    padding: EdgeInsets.only(top: 40),
-                    child: Center(child: Text("No redemption history found")),
-                  )
-                ]
-              : redemptions.map((e) => redemptionCard(e as Map)).toList(),
-        ),
-      ),
+      body:
+          loading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                onRefresh: loadRedemptions,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children:
+                      redemptions.isEmpty
+                          ? const [
+                            Padding(
+                              padding: EdgeInsets.only(top: 40),
+                              child: Center(
+                                child: Text("No redemption history found"),
+                              ),
+                            ),
+                          ]
+                          : redemptions
+                              .map((e) => redemptionCard(e as Map))
+                              .toList(),
+                ),
+              ),
     );
   }
 }
+
 class AboutUsScreen extends StatelessWidget {
   const AboutUsScreen({super.key});
 
@@ -2704,10 +2732,7 @@ class AboutUsScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: const TextStyle(color: Colors.black54),
-                ),
+                Text(subtitle, style: const TextStyle(color: Colors.black54)),
               ],
             ),
           ),
@@ -2760,10 +2785,7 @@ class AboutUsScreen extends StatelessWidget {
                 Text(
                   "Coupon scanning, points tracking and dealer rewards made simple.",
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 15,
-                  ),
+                  style: TextStyle(color: Colors.white70, fontSize: 15),
                 ),
               ],
             ),
@@ -2778,13 +2800,15 @@ class AboutUsScreen extends StatelessWidget {
           infoTile(
             icon: Icons.account_balance_wallet,
             title: "Wallet Tracking",
-            subtitle: "Monitor total points and part-wise rewards in one place.",
+            subtitle:
+                "Monitor total points and part-wise rewards in one place.",
             color: const Color(0xFF059669),
           ),
           infoTile(
             icon: Icons.history,
             title: "History & Redemptions",
-            subtitle: "Review scanned coupons, redemption records and coupon sets.",
+            subtitle:
+                "Review scanned coupons, redemption records and coupon sets.",
             color: const Color(0xFFEA580C),
           ),
         ],

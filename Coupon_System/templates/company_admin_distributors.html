@@ -235,6 +235,7 @@
 
             <form method="POST"
                   action="{% if edit_distributor %}{{ url_for('admin.edit_distributor', distributor_id=edit_distributor.id) }}{% else %}{{ url_for('admin.add_distributor') }}{% endif %}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <div class="row g-3">
                         <div class="col-md-6">

@@ -1,6 +1,8 @@
 import code
-from extensions import mail
 
+from bson import ObjectId
+from extensions import mail
+from datetime import datetime, timedelta
 from flask_mail import Message
 import os
 import io
@@ -41,6 +43,21 @@ def send_raw_to_usb_printer(raw_data: str):
             win32print.EndDocPrinter(hprinter)
     finally:
         win32print.ClosePrinter(hprinter)
+
+def get_db():
+    mongo = current_app.config["MONGO_INSTANCE"]
+    return mongo.cx["flowra_db"]
+
+
+def now():
+    return datetime.utcnow()
+
+
+def oid(value):
+    try:
+        return ObjectId(value)
+    except Exception:
+        return value
 
 def has_active_subscription(user_id):
     mysql = current_app.config["MYSQL_INSTANCE"]
@@ -210,8 +227,8 @@ def build_coupon_zpl(part_no, mrp, pack_size, points, code, brand_name, qr_size=
 ^BQN,2,8
 ^FDLA,{code}^FS
 
-^FO78,350^A0N,24,24^FD{code}^FS
-^FO79,350^A0N,24,24^FD{code}^FS
+^FO78,340^A0N,36,36^FD{code}^FS
+^FO79,340^A0N,36,36^FD{code}^FS
 
 ^XZ
 """
@@ -225,6 +242,7 @@ def build_coupon_zpl(part_no, mrp, pack_size, points, code, brand_name, qr_size=
 ^FO0,0^GB400,200,2^FS
 
 ^FO0,0^GB58,200,58^FS
+^FO8,15^A0B,24,24^FD{brand_name}^FS
 
 ^FO74,10^A0N,26,26^FD{part_no}^FS
 ^FO75,10^A0N,26,26^FD{part_no}^FS
@@ -242,8 +260,8 @@ def build_coupon_zpl(part_no, mrp, pack_size, points, code, brand_name, qr_size=
 ^BQN,2,5
 ^FDLA,{code}^FS
 
-^FO74,165^A0N,20,20^FD{code}^FS
-^FO75,165^A0N,20,20^FD{code}^FS
+^FO74,160^A0N,30,30^FD{code}^FS
+^FO75,160^A0N,30,30^FD{code}^FS
 
 ^XZ
 """
@@ -698,41 +716,61 @@ def qr_employee_generate():
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
     if request.method == "POST":
         product_name = request.form.get("product_name", "").strip()
         product_type = request.form.get("product_type", "").strip()
-        coupon_count = int(request.form.get("coupon_count", 0))
-        points = int(request.form.get("points", 0))
+
+        try:
+            coupon_count = int(request.form.get("coupon_count", 0) or 0)
+        except:
+            coupon_count = 0
+
+        try:
+            points = int(request.form.get("points", 0) or 0)
+        except:
+            points = 0
 
         if not product_name or not product_type or coupon_count <= 0 or points <= 0:
             flash("Please fill all fields correctly.", "danger")
             return redirect(url_for("admin.qr_employee_generate"))
 
-        cur = mysql.connection.cursor()
+        generated_count = 0
 
         for _ in range(coupon_count):
-            code = str(uuid.uuid4())[:8]
-            qr_path = generate_qr(code)
+            code = generate_code(16)
 
-            cur.execute("""
-                INSERT INTO coupons (code, points, status, created_by, company_id)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (
-                code,
-                points,
-                "unused",
-                session["user_id"],
-                company_id
-            ))
+            while db.coupons.find_one({"code": code}):
+                code = generate_code(16)
 
-        mysql.connection.commit()
-        cur.close()
+            qr_data = f"https://192.168.1.13:5000/scan/{code}"
+            filename = f"{code}.png"
+            qr_path = generate_qr(qr_data, filename)
 
-        flash(f"{coupon_count} coupons generated for {product_name}.", "success")
-        return redirect(url_for("admin.qr_employee_generate"))
+            db.coupons.insert_one({
+                "code": code,
+                "product_name": product_name,
+                "product_type": product_type,
+                "part_no": "",
+                "mrp": 0,
+                "dlp": 0,
+                "pack_size": "",
+                "points": points,
+                "qr_size": "25x50",
+                "qr_image": qr_path.replace("\\", "/"),
+                "company_id": company_id,
+                "created_by": session.get("user_id"),
+                "status": "unused",
+                "is_deleted": 0,
+                "created_at": now()
+            })
+
+            generated_count += 1
+
+        flash(f"{generated_count} coupons generated for {product_name}.", "success")
+        return redirect(url_for("admin.coupon_list"))
 
     return render_template("qr_employee_generate.html")
 
@@ -811,7 +849,14 @@ def general_employee_dashboard():
         total_scans=total_scans,
         total_coupons=total_coupons
     )
+@admin_bp.route("/qr-employee/dashboard")
+def qr_employee_dashboard():
 
+    if "user_id" not in session or session.get("user_role") != "qr_employee":
+        flash("Please login first.", "warning")
+        return redirect(url_for("auth.login"))
+
+    return render_template("qr_employee_dashboard.html")
 @admin_bp.route("/qr-employee/import-excel", methods=["GET", "POST"])
 def import_excel_qr():
     if "user_id" not in session or session.get("user_role") != "qr_employee":
@@ -824,7 +869,7 @@ def import_excel_qr():
             flash("Upload Excel file", "danger")
             return redirect(url_for("admin.import_excel_qr"))
 
-        mysql = current_app.config["MYSQL_INSTANCE"]
+        db = get_db()
         company_id = session.get("company_id")
 
         try:
@@ -834,9 +879,6 @@ def import_excel_qr():
                 for col in df.columns
             ]
 
-           
-
-            cur = mysql.connection.cursor()
             generated_count = 0
             skipped_count = 0
 
@@ -846,28 +888,6 @@ def import_excel_qr():
                 product_type = str(row.get("product_type", "Lubricant")).strip() or "Lubricant"
                 pack_size = str(row.get("pack_size", "N/A")).strip() or "N/A"
 
-                mrp = row.get("mrp", 0)
-                dlp = row.get("dlp", 0)
-
-                # coupon field hi reward value hai
-                reward_value = (
-                    row.get("coupon", 0)
-                    or row.get("coupon_value", 0)
-                    or row.get("points", 0)
-                    or row.get("value", 0)
-                )
-
-                # qr size system se default
-                qr_size = str(row.get("qr_size", "25x50")).strip() or "25x50"
-
-                # optional code from excel, warna auto-generate
-                excel_code = row.get("code", None)
-                if excel_code is not None and not pd.isna(excel_code) and str(excel_code).strip() != "":
-                    code = str(excel_code).strip().upper()
-                else:
-                    code = generate_code()
-
-                # blank rows skip
                 if not part_no or part_no.lower() == "nan":
                     skipped_count += 1
                     continue
@@ -875,6 +895,28 @@ def import_excel_qr():
                 if not product_name or product_name.lower() == "nan":
                     skipped_count += 1
                     continue
+
+                mrp = row.get("mrp", 0)
+                dlp = row.get("dlp", 0)
+
+                reward_value = (
+                    row.get("coupon", 0)
+                    or row.get("coupon_value", 0)
+                    or row.get("points", 0)
+                    or row.get("value", 0)
+                )
+
+                qr_size = str(row.get("qr_size", "25x50")).strip() or "25x50"
+
+                excel_code = row.get("code", None)
+
+                if excel_code is not None and not pd.isna(excel_code) and str(excel_code).strip() != "":
+                    code = str(excel_code).strip().upper()
+                else:
+                    code = generate_code()
+
+                while db.coupons.find_one({"code": code}):
+                    code = generate_code()
 
                 try:
                     if str(mrp).strip() == "***":
@@ -895,49 +937,29 @@ def import_excel_qr():
                 except Exception:
                     reward_value = 0
 
-                qr_data = f"http://192.168.1.13:5000/scan/{code}"
+                qr_data = f"https://192.168.1.13:5000/scan/{code}"
                 filename = f"{code}.png"
                 qr_path = generate_qr(qr_data, filename)
 
-                cur.execute("""
-                    INSERT INTO coupons (
-                        code,
-                        product_name,
-                        product_type,
-                        part_no,
-                        mrp,
-                        dlp,
-                        pack_size,
-                        points,
-                        qr_size,
-                        qr_image,
-                        company_id,
-                        created_by,
-                        status,
-                        is_deleted
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    code,
-                    product_name,
-                    product_type,
-                    part_no,
-                    mrp,
-                    dlp,
-                    pack_size,
-                    reward_value,
-                    qr_size,
-                    qr_path.replace("\\", "/"),
-                    company_id,
-                    session["user_id"],
-                    "unused",
-                    0
-                ))
+                db.coupons.insert_one({
+                    "code": code,
+                    "product_name": product_name,
+                    "product_type": product_type,
+                    "part_no": part_no,
+                    "mrp": mrp,
+                    "dlp": dlp,
+                    "pack_size": pack_size,
+                    "points": reward_value,
+                    "qr_size": qr_size,
+                    "qr_image": qr_path.replace("\\", "/"),
+                    "company_id": company_id,
+                    "created_by": session.get("user_id"),
+                    "status": "unused",
+                    "is_deleted": 0,
+                    "created_at": now()
+                })
 
                 generated_count += 1
-
-            mysql.connection.commit()
-            cur.close()
 
             flash(f"Import complete. Generated: {generated_count}, Skipped: {skipped_count}", "success")
             return redirect(url_for("admin.coupon_list"))
@@ -951,141 +973,134 @@ def import_excel_qr():
 
 @admin_bp.route("/qr-employee/coupons")
 def coupon_list():
+
     if "user_id" not in session or session.get("user_role") != "qr_employee":
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
-    company_id = session["company_id"]
+    db = get_db()
 
-    cur.execute("""
-        SELECT
-            id,
-            code,
-            product_name,
-            product_type,
-            part_no,
-            mrp,
-            dlp,
-            pack_size,
-            points,
-            qr_size
-        FROM coupons
-        WHERE company_id = %s AND is_deleted = 0
-        ORDER BY id DESC
-    """, (company_id,))
+    company_id = session.get("company_id")
 
-    data = cur.fetchall()
-    cur.close()
+    rows = db.coupons.find({
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }).sort("_id", -1)
 
-    return render_template("coupon_list.html", coupons=data)
+    coupons = []
+
+    for row in rows:
+
+        coupons.append({
+            "id": str(row.get("_id")),
+            "code": row.get("code", ""),
+            "product_name": row.get("product_name", ""),
+            "product_type": row.get("product_type", ""),
+            "part_no": row.get("part_no", ""),
+            "mrp": row.get("mrp", 0),
+            "dlp": row.get("dlp", 0),
+            "pack_size": row.get("pack_size", ""),
+            "points": row.get("points", 0),
+            "qr_size": row.get("qr_size", "")
+        })
+
+    return render_template(
+        "coupon_list.html",
+        coupons=coupons
+    )
 
 
-@admin_bp.route("/coupon/edit/<int:id>", methods=["GET", "POST"])
+@admin_bp.route("/coupon/edit/<id>", methods=["GET", "POST"])
 def edit_coupon(id):
-    if "user_id" not in session or session.get("user_role") != "qr_employee":
+
+    if "user_id" not in session:
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
-    company_id = session["company_id"]
+    db = get_db()
 
-    if request.method == "POST":
-        try:
-            product_name = request.form.get("product_name", "").strip()
-            product_type = request.form.get("product_type", "").strip()
-            part_no = request.form.get("part_no", "").strip()
-            mrp = request.form.get("mrp", "").strip()
-            dlp = request.form.get("dlp", "").strip()
-            pack_size = request.form.get("pack_size", "").strip()
-            points = request.form.get("points", "").strip()
-            qr_size = request.form.get("qr_size", "").strip()
+    coupon = db.coupons.find_one({
+        "_id": oid(id)
+    })
 
-            mrp = float(mrp) if mrp else 0
-            dlp = float(dlp) if dlp else 0
-            points = int(float(points)) if points else 0
-
-            cur.execute("""
-                UPDATE coupons SET
-                    product_name = %s,
-                    product_type = %s,
-                    part_no = %s,
-                    mrp = %s,
-                    dlp = %s,
-                    pack_size = %s,
-                    points = %s,
-                    qr_size = %s
-                WHERE id = %s AND company_id = %s
-            """, (
-                product_name,
-                product_type,
-                part_no,
-                mrp,
-                dlp,
-                pack_size,
-                points,
-                qr_size,
-                id,
-                company_id
-            ))
-
-            mysql.connection.commit()
-            cur.close()
-
-            flash("Coupon updated successfully.", "success")
-            return redirect(url_for("admin.coupon_list"))
-
-        except Exception as e:
-            cur.close()
-            flash(f"Error updating coupon: {str(e)}", "danger")
-            return redirect(url_for("admin.edit_coupon", id=id))
-
-    cur.execute("""
-        SELECT
-            id,
-            code,
-            product_name,
-            product_type,
-            part_no,
-            mrp,
-            dlp,
-            pack_size,
-            points,
-            qr_size
-        FROM coupons
-        WHERE id = %s AND company_id = %s AND is_deleted = 0
-        LIMIT 1
-    """, (id, company_id))
-
-    data = cur.fetchone()
-    cur.close()
-
-    if not data:
-        flash("Coupon not found.", "danger")
+    if not coupon:
+        flash("Coupon not found", "danger")
         return redirect(url_for("admin.coupon_list"))
 
-    return render_template("edit_coupon.html", c=data)
+    if request.method == "POST":
+
+        product_name = request.form.get("product_name", "").strip()
+        product_type = request.form.get("product_type", "").strip()
+        part_no = request.form.get("part_no", "").strip()
+
+        try:
+            mrp = float(request.form.get("mrp", 0) or 0)
+        except:
+            mrp = 0
+
+        try:
+            dlp = float(request.form.get("dlp", 0) or 0)
+        except:
+            dlp = 0
+
+        try:
+            points = int(request.form.get("points", 0) or 0)
+        except:
+            points = 0
+
+        pack_size = request.form.get("pack_size", "").strip()
+        qr_size = request.form.get("qr_size", "").strip()
+
+        db.coupons.update_one(
+            {"_id": oid(id)},
+            {
+                "$set": {
+                    "product_name": product_name,
+                    "product_type": product_type,
+                    "part_no": part_no,
+                    "mrp": mrp,
+                    "dlp": dlp,
+                    "points": points,
+                    "pack_size": pack_size,
+                    "qr_size": qr_size,
+                    "updated_at": now()
+                }
+            }
+        )
+
+        flash("Coupon updated successfully", "success")
+        return redirect(url_for("admin.coupon_list"))
+
+    coupon["_id"] = str(coupon["_id"])
+
+    return render_template(
+        "edit_coupon.html",
+        coupon=coupon
+    )
 
 
-@admin_bp.route("/coupon/delete/<int:id>", methods=["POST"])
+@admin_bp.route("/coupon/delete/<id>", methods=["POST"])
 def delete_coupon(id):
-    if "user_id" not in session or session.get("user_role") != "qr_employee":
+
+    if "user_id" not in session:
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
-    company_id = session["company_id"]
+    db = get_db()
 
-    cur.execute("""
-        UPDATE coupons
-        SET is_deleted = 1
-        WHERE id = %s AND company_id = %s
-    """, (id, company_id))
+    db.coupons.update_one(
+        {"_id": oid(id)},
+        {
+            "$set": {
+                "is_deleted": 1,
+                "deleted_at": now()
+            }
+        }
+    )
 
-    mysql.connection.commit()
-    cur.close()
+    flash("Coupon deleted successfully", "success")
 
-    flash("Coupon deleted successfully.", "success")
     return redirect(url_for("admin.coupon_list"))
 
 @admin_bp.route("/company-admin/employee/edit/<int:employee_id>", methods=["GET", "POST"])
@@ -1211,138 +1226,246 @@ from flask import render_template, request, redirect, url_for, flash, session, c
 
 @admin_bp.route("/qr-employee/coupon-generator", methods=["GET", "POST"])
 def coupon_generator():
+
     if "user_id" not in session or session.get("user_role") != "qr_employee":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
+
     company_id = session.get("company_id")
 
     search_text = ""
     selected_qr_size = "25x50"
-    brand_name = "VOLTAGE"
+    brand_name = ""
     count = 10
 
-    cur = mysql.connection.cursor()
+    # -----------------------------
+    # PART NUMBER DROPDOWN
+    # -----------------------------
+    pipeline = [
+        {
+            "$match": {
+                "company_id": company_id,
+                "part_no": {"$nin": [None, ""]},
+                "product_name": {"$nin": [None, ""]},
+                "$or": [
+                    {"is_deleted": 0},
+                    {"is_deleted": False},
+                    {"is_deleted": {"$exists": False}},
+                    {"is_deleted": None}
+                ]
+            }
+        },
+        {
+            "$group": {
+                "_id": "$part_no",
+                "product_name": {"$first": "$product_name"}
+            }
+        },
+        {
+            "$sort": {
+                "_id": 1
+            }
+        }
+    ]
 
-    # Part number dropdown
-    cur.execute("""
-        SELECT DISTINCT part_no, product_name
-        FROM coupons
-        WHERE company_id = %s
-          AND part_no IS NOT NULL
-          AND part_no <> ''
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-        ORDER BY part_no ASC
-    """, (company_id,))
-    parts = cur.fetchall()
+    parts = []
 
+    for item in db.coupons.aggregate(pipeline):
+
+        parts.append((
+            item.get("_id", ""),
+            item.get("product_name", "")
+        ))
+
+    # -----------------------------
+    # FORM SUBMIT
+    # -----------------------------
     if request.method == "POST":
+
         search_text = request.form.get("search_text", "").strip()
-        selected_qr_size = request.form.get("qr_size", "25x50").strip()
-        brand_name = request.form.get("brand_name", "VOLTAGE").strip() or "VOLTAGE"
+
+        selected_qr_size = request.form.get(
+            "qr_size",
+            "25x50"
+        ).strip()
+
+        brand_name = request.form.get(
+            "brand_name",
+            ""
+        ).strip()
 
         try:
-            count = int(request.form.get("count", 10))
+            count = int(request.form.get("count", 10) or 10)
+
             if count <= 0:
                 count = 1
+
         except:
             count = 1
 
         if not search_text:
-            flash("Please select part number.", "danger")
-            return render_template("coupon_generator.html", parts=parts)
 
-        # Product fetch
-        cur.execute("""
-            SELECT part_no, product_name, product_type, mrp, dlp, pack_size, points
-            FROM coupons
-            WHERE company_id = %s
-              AND part_no = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            ORDER BY id DESC
-            LIMIT 1
-        """, (company_id, search_text))
-        product = cur.fetchone()
+            flash("Please select part number.", "danger")
+
+            return render_template(
+                "coupon_generator.html",
+                parts=parts,
+                brand_name=brand_name,
+                selected_qr_size=selected_qr_size,
+                count=count
+            )
+
+        # -----------------------------
+        # FETCH PRODUCT
+        # -----------------------------
+        product = db.coupons.find_one(
+            {
+                "company_id": company_id,
+                "part_no": search_text,
+
+                "$or": [
+                    {"is_deleted": 0},
+                    {"is_deleted": False},
+                    {"is_deleted": {"$exists": False}},
+                    {"is_deleted": None}
+                ]
+            },
+
+            sort=[("_id", -1)]
+        )
 
         if not product:
-            flash("No product found.", "danger")
-            return render_template("coupon_generator.html", parts=parts)
 
-        part_no, product_name, product_type, mrp, dlp, pack_size, points = product
+            flash("No product found.", "danger")
+
+            return render_template(
+                "coupon_generator.html",
+                parts=parts,
+                brand_name=brand_name,
+                selected_qr_size=selected_qr_size,
+                count=count
+            )
+
+        part_no = product.get("part_no", "")
+        product_name = product.get("product_name", "")
+        product_type = product.get("product_type", "")
+        mrp = float(product.get("mrp") or 0)
+        dlp = float(product.get("dlp") or 0)
+        pack_size = product.get("pack_size", "")
+        points = int(product.get("points") or 0)
 
         zpl_batch = ""
 
         try:
+
+            generated_count = 0
+
             for _ in range(count):
 
+                # -----------------------------
                 # UNIQUE CODE
+                # -----------------------------
                 code = generate_code(16)
 
-                cur.execute("SELECT id FROM coupons WHERE code=%s", (code,))
-                while cur.fetchone():
+                while db.coupons.find_one({"code": code}):
                     code = generate_code(16)
-                    cur.execute("SELECT id FROM coupons WHERE code=%s", (code,))
 
-                # ✅ QR GENERATE (FIXED)
+                # -----------------------------
+                # QR GENERATE
+                # -----------------------------
                 qr_data = f"https://192.168.1.13:5000/scan/{code}"
+
                 filename = f"{code}.png"
+
                 qr_path = generate_qr(qr_data, filename)
 
-                # ✅ SAVE IN DB (FIXED)
-                cur.execute("""
-                    INSERT INTO coupons
-                    (
-                        code, product_name, product_type, part_no,
-                        mrp, dlp, pack_size, points,
-                        qr_size, qr_image,
-                        company_id, created_by,
-                        status, is_deleted
-                    )
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                """, (
-                    code,
-                    product_name,
-                    product_type,
-                    part_no,
-                    float(mrp or 0),
-                    float(dlp or 0),
-                    pack_size,
-                    int(points or 0),
-                    selected_qr_size,
-                    qr_path.replace("\\", "/"),
-                    company_id,
-                    session["user_id"],
-                    "unused",
-                    0
-                ))
+                # -----------------------------
+                # SAVE COUPON
+                # -----------------------------
+                db.coupons.insert_one({
 
-                # PRINT DATA
+                    "code": code,
+
+                    "product_name": product_name,
+                    "product_type": product_type,
+
+                    "part_no": part_no,
+
+                    "mrp": mrp,
+                    "dlp": dlp,
+
+                    "pack_size": pack_size,
+
+                    "points": points,
+
+                    "qr_size": selected_qr_size,
+
+                    "qr_image": qr_path.replace("\\", "/"),
+
+                    "company_id": company_id,
+
+                    "created_by": session.get("user_id"),
+
+                    "status": "unused",
+
+                    "is_deleted": 0,
+
+                    "created_at": now()
+                })
+
+                # -----------------------------
+                # ZPL BUILD
+                # -----------------------------
                 zpl_batch += build_coupon_zpl(
+
                     part_no=part_no,
-                    mrp=float(mrp or 0),
+
+                    mrp=mrp,
+
                     pack_size=pack_size,
-                    points=int(points or 0),
+
+                    points=points,
+
                     code=code,
+
                     brand_name=brand_name,
+
                     qr_size=selected_qr_size
                 )
 
-            mysql.connection.commit()
+                generated_count += 1
 
-            # ✅ PRINT
+            # -----------------------------
+            # PRINT
+            # -----------------------------
             send_raw_to_usb_printer(zpl_batch)
 
-            flash(f"{count} coupons generated & printed!", "success")
+            flash(
+                f"{generated_count} coupons generated & printed!",
+                "success"
+            )
 
         except Exception as e:
-            mysql.connection.rollback()
-            flash(f"Error: {str(e)}", "danger")
+
+            flash(
+                f"Error: {str(e)}",
+                "danger"
+            )
 
         return redirect(url_for("admin.coupon_generator"))
 
-    cur.close()
-    return render_template("coupon_generator.html", parts=parts)
+    # -----------------------------
+    # PAGE LOAD
+    # -----------------------------
+    return render_template(
+        "coupon_generator.html",
+        parts=parts,
+        brand_name=brand_name,
+        selected_qr_size=selected_qr_size,
+        count=count
+    )
 
 
 
@@ -1654,56 +1777,52 @@ def company_admin_employees_page():
 
 @admin_bp.route("/company-admin/distributors")
 def company_admin_distributors_page():
+
     if "user_id" not in session:
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
+
     company_id = session.get("company_id")
     user_role = session.get("user_role")
     user_id = session.get("user_id")
 
-    cur = mysql.connection.cursor()
+    query = {
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }
 
     if user_role == "sales":
-        cur.execute("""
-            SELECT id, dealer_code, name, mobile, email, pan, gst, city, state, address
-            FROM distributors
-            WHERE company_id = %s
-              AND salesman_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            ORDER BY id DESC
-        """, (company_id, user_id))
-    else:
-        cur.execute("""
-            SELECT id, dealer_code, name, mobile, email, pan, gst, city, state, address
-            FROM distributors
-            WHERE company_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            ORDER BY id DESC
-        """, (company_id,))
+        query["salesman_id"] = user_id
 
-    rows = cur.fetchall()
-    cur.close()
+    rows = db.distributors.find(query).sort("_id", -1)
 
     distributors = []
+
     for row in rows:
+
         distributors.append({
-            "id": row[0],
-            "dealer_code": row[1],
-            "name": row[2],
-            "mobile": row[3],
-            "email": row[4],
-            "pan": row[5],
-            "gst": row[6],
-            "city": row[7],
-            "state": row[8],
-            "address": row[9]
+            "id": str(row.get("_id")),
+            "dealer_code": row.get("dealer_code", ""),
+            "name": row.get("name", ""),
+            "mobile": row.get("mobile", ""),
+            "email": row.get("email", ""),
+            "pan": row.get("pan", ""),
+            "gst": row.get("gst", ""),
+            "city": row.get("city", ""),
+            "state": row.get("state", ""),
+            "address": row.get("address", "")
         })
 
-    return render_template("company_admin_distributors.html", distributors=distributors)
-
-from MySQLdb import IntegrityError
+    return render_template(
+        "company_admin_distributors.html",
+        distributors=distributors
+    )
 
 @admin_bp.route("/company-admin/distributors/add", methods=["POST"])
 def add_distributor():
@@ -1711,7 +1830,7 @@ def add_distributor():
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
     dealer_code = request.form.get("dealer_code", "").strip()
@@ -1731,123 +1850,74 @@ def add_distributor():
 
     hashed_password = generate_password_hash(password) if password else None
 
-    cur = mysql.connection.cursor()
+    existing = db.distributors.find_one({
+        "dealer_code": dealer_code,
+        "company_id": company_id
+    })
 
-    try:
-        # Check same dealer code in same company
-        cur.execute("""
-            SELECT id, is_deleted
-            FROM distributors
-            WHERE dealer_code = %s
-              AND company_id = %s
-            LIMIT 1
-        """, (dealer_code, company_id))
-        existing = cur.fetchone()
+    if existing:
+        is_deleted = existing.get("is_deleted", 0)
 
-        if existing:
-            existing_id = existing[0]
-            is_deleted = int(existing[1] or 0)
-
-            # Active record already exists
-            if is_deleted == 0:
-                cur.close()
-                flash("Dealer code already exists. Please use a different code.", "danger")
-                return redirect(url_for("admin.company_admin_distributors_page"))
-
-            # Deleted record exists -> restore it
-            cur.execute("""
-                UPDATE distributors
-                SET
-                    name = %s,
-                    mobile = %s,
-                    email = %s,
-                    password = %s,
-                    pan = %s,
-                    gst = %s,
-                    city = %s,
-                    state = %s,
-                    address = %s,
-                    is_deleted = 0
-                WHERE id = %s
-            """, (
-                name,
-                mobile,
-                email,
-                hashed_password,
-                pan,
-                gst,
-                city,
-                state,
-                address,
-                existing_id
-            ))
-
-            mysql.connection.commit()
-            cur.close()
-
-            flash("Previously deleted distributor restored successfully.", "success")
+        if is_deleted == 0 or is_deleted is False or is_deleted is None:
+            flash("Dealer code already exists. Please use a different code.", "danger")
             return redirect(url_for("admin.company_admin_distributors_page"))
 
-        # Check active email duplicate separately
-        if email:
-            cur.execute("""
-                SELECT id
-                FROM distributors
-                WHERE email = %s
-                  AND company_id = %s
-                  AND (is_deleted = 0 OR is_deleted IS NULL)
-                LIMIT 1
-            """, (email, company_id))
-            existing_email = cur.fetchone()
+        db.distributors.update_one(
+            {"_id": existing["_id"]},
+            {
+                "$set": {
+                    "name": name,
+                    "mobile": mobile,
+                    "email": email,
+                    "password": hashed_password,
+                    "pan": pan,
+                    "gst": gst,
+                    "city": city,
+                    "state": state,
+                    "address": address,
+                    "is_deleted": 0,
+                    "updated_at": now()
+                }
+            }
+        )
 
-            if existing_email:
-                cur.close()
-                flash("Email already exists. Please use a different email.", "danger")
-                return redirect(url_for("admin.company_admin_distributors_page"))
-
-        # Fresh insert
-        cur.execute("""
-            INSERT INTO distributors
-            (
-                dealer_code,
-                name,
-                mobile,
-                email,
-                password,
-                pan,
-                gst,
-                city,
-                state,
-                address,
-                company_id,
-                is_deleted
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0)
-        """, (
-            dealer_code,
-            name,
-            mobile,
-            email,
-            hashed_password,
-            pan,
-            gst,
-            city,
-            state,
-            address,
-            company_id
-        ))
-
-        mysql.connection.commit()
-        cur.close()
-
-        flash("Distributor added successfully.", "success")
+        flash("Previously deleted distributor restored successfully.", "success")
         return redirect(url_for("admin.company_admin_distributors_page"))
 
-    except Exception as e:
-        mysql.connection.rollback()
-        cur.close()
-        flash(f"Error adding distributor: {str(e)}", "danger")
-        return redirect(url_for("admin.company_admin_distributors_page"))
+    if email:
+        existing_email = db.distributors.find_one({
+            "email": email,
+            "company_id": company_id,
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
+
+        if existing_email:
+            flash("Email already exists. Please use a different email.", "danger")
+            return redirect(url_for("admin.company_admin_distributors_page"))
+
+    db.distributors.insert_one({
+        "dealer_code": dealer_code,
+        "name": name,
+        "mobile": mobile,
+        "email": email,
+        "password": hashed_password,
+        "pan": pan,
+        "gst": gst,
+        "city": city,
+        "state": state,
+        "address": address,
+        "company_id": company_id,
+        "salesman_id": session.get("user_id") if session.get("user_role") == "sales" else None,
+        "is_deleted": 0,
+        "created_at": now()
+    })
+
+    flash("Distributor added successfully.", "success")
+    return redirect(url_for("admin.company_admin_distributors_page"))
     
 
 @admin_bp.route("/company-admin/retailers")
@@ -3161,8 +3231,10 @@ def general_employee_orders():
 
     return render_template("general_employee_orders.html", orders=orders)
 
-from flask import request, jsonify
+from flask import request, jsonify, current_app
 from werkzeug.security import check_password_hash
+import secrets
+
 @csrf.exempt
 @admin_bp.route("/api/dealer/login", methods=["POST"])
 def dealer_login_api():
@@ -3172,46 +3244,53 @@ def dealer_login_api():
         if not data:
             return jsonify({"success": False, "message": "Invalid request"}), 400
 
-        login_value = data.get("login")
-        password = data.get("password")
+        login_value = (data.get("login") or "").strip().lower()
+        password = data.get("password") or ""
 
-        mysql = current_app.config["MYSQL_INSTANCE"]
-        cur = mysql.connection.cursor()
+        if not login_value or not password:
+            return jsonify({"success": False, "message": "Login and password required"}), 400
 
-        cur.execute("""
-            SELECT id, dealer_code, name, mobile, email, password,
-                   city, state, gst, pan, address, profile_image
-            FROM distributors
-            WHERE email=%s OR mobile=%s
-            LIMIT 1
-        """, (login_value, login_value))
+        db = get_db()
 
-        dealer = cur.fetchone()
+        dealer = db.distributors.find_one({
+    "$and": [
+        {
+            "$or": [
+                {"email": login_value},
+                {"mobile": login_value}
+            ]
+        },
+        {
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        }
+    ]
+})
 
         if not dealer:
             return jsonify({"success": False, "message": "Invalid login"}), 401
 
-        if not check_password_hash(dealer[5], password):
+        dealer_password = dealer.get("password") or ""
+
+        if not dealer_password or not check_password_hash(dealer_password, password):
             return jsonify({"success": False, "message": "Invalid password"}), 401
 
-        dealer_id = dealer[0]
+        dealer_id = dealer["_id"]
 
-        # 🔥 token generate
         token = secrets.token_hex(32)
 
-        cur.execute("""
-            UPDATE distributors
-            SET active_token=%s
-            WHERE id=%s
-        """, (token, dealer_id))
+        db.distributors.update_one(
+            {"_id": dealer_id},
+            {"$set": {"active_token": token, "last_login": now()}}
+        )
 
-        mysql.connection.commit()
-        cur.close()
-
-        # 🔥 PROFILE IMAGE FIX (IMPORTANT)
         profile_image = ""
-        if dealer[11]:
-            value = str(dealer[11]).strip()
+        if dealer.get("profile_image"):
+            value = str(dealer.get("profile_image")).strip()
 
             if value.startswith("http"):
                 profile_image = value
@@ -3222,16 +3301,16 @@ def dealer_login_api():
             "success": True,
             "token": token,
             "dealer": {
-                "id": dealer[0],
-                "dealer_code": dealer[1],
-                "name": dealer[2],
-                "mobile": dealer[3],
-                "email": dealer[4],
-                "city": dealer[6] or "",
-                "state": dealer[7] or "",
-                "gst": dealer[8] or "",
-                "pan": dealer[9] or "",
-                "address": dealer[10] or "",
+                "id": str(dealer.get("_id")),
+                "dealer_code": dealer.get("dealer_code", ""),
+                "name": dealer.get("name", ""),
+                "mobile": dealer.get("mobile", ""),
+                "email": dealer.get("email", ""),
+                "city": dealer.get("city", ""),
+                "state": dealer.get("state", ""),
+                "gst": dealer.get("gst", ""),
+                "pan": dealer.get("pan", ""),
+                "address": dealer.get("address", ""),
                 "profile_image": profile_image
             }
         }), 200
@@ -3277,158 +3356,105 @@ def dealer_logout_api():
             "message": f"Server error: {str(e)}"
         }), 500
     
-from flask import jsonify, current_app
 @csrf.exempt
-@admin_bp.route("/api/dealer/scan/<code>/<int:dealer_id>", methods=["POST"])
+@admin_bp.route("/api/dealer/scan/<code>/<dealer_id>", methods=["POST"])
 def dealer_scan_coupon(code, dealer_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
-
     try:
-        # 1) Dealer check
-        cur.execute("""
-            SELECT id, name
-            FROM distributors
-            WHERE id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            LIMIT 1
-        """, (dealer_id,))
-        dealer = cur.fetchone()
+        db = get_db()
+        code = code.strip().upper()
+
+        dealer = db.distributors.find_one({
+            "_id": oid(dealer_id),
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
 
         if not dealer:
-            return jsonify({
-                "success": False,
-                "message": "Dealer not found"
-            }), 404
+            return jsonify({"success": False, "message": "Dealer not found"}), 404
 
-        # 2) Coupon fetch
-        cur.execute("""
-            SELECT id, code, part_no, points, status
-            FROM coupons
-            WHERE code = %s
-              AND is_deleted = 0
-            LIMIT 1
-        """, (code,))
-        coupon = cur.fetchone()
+        coupon = db.coupons.find_one({
+            "code": code,
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
 
         if not coupon:
-            return jsonify({
-                "success": False,
-                "message": "Invalid coupon code"
-            }), 404
+            return jsonify({"success": False, "message": "Invalid coupon code"}), 404
 
-        coupon_id = coupon[0]
-        coupon_code = coupon[1]
-        part_no = coupon[2]
-        points = int(coupon[3] or 0)
-        status = (coupon[4] or "").strip().lower()
+        status = (coupon.get("status") or "").strip().lower()
 
-        # 3) Status checks
         if status == "redeemed":
-            return jsonify({
-                "success": False,
-                "message": "Coupon already redeemed"
-            }), 200
+            return jsonify({"success": False, "message": "Coupon already redeemed"}), 200
 
         if status == "scanned":
-            return jsonify({
-                "success": False,
-                "message": "Coupon already scanned"
-            }), 200
+            return jsonify({"success": False, "message": "Coupon already scanned"}), 200
 
-        # 4) Mark coupon scanned
-        # IMPORTANT:
-        # dealer_id = wallet/history ke liye
-        # scanned_by = analytics ke liye
-        cur.execute("""
-            UPDATE coupons
-            SET
-                dealer_id = %s,
-                scanned_by = %s,
-                status = 'scanned',
-                scanned_at = NOW()
-            WHERE id = %s
-        """, (dealer_id, dealer_id, coupon_id))
+        part_no = coupon.get("part_no", "")
+        points = int(coupon.get("points") or 0)
 
-        # 5) Update / Insert dealer_coupon_sets
+        db.coupons.update_one(
+            {"_id": coupon["_id"]},
+            {
+                "$set": {
+                    "dealer_id": dealer_id,
+                    "scanned_by": dealer_id,
+                    "status": "scanned",
+                    "scanned_at": now()
+                }
+            }
+        )
+
+        scanned_coupons = list(db.coupons.find({
+            "dealer_id": dealer_id,
+            "part_no": part_no,
+            "status": {"$in": ["scanned", "redeemed"]},
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        }))
+
+        total_scans = len(scanned_coupons)
+        total_points = sum(int(c.get("points") or 0) for c in scanned_coupons)
+
         set_size = 10
-
-        cur.execute("""
-            SELECT COUNT(*), COALESCE(SUM(points), 0)
-            FROM coupons
-            WHERE dealer_id = %s
-              AND part_no = %s
-              AND status IN ('scanned', 'redeemed')
-              AND is_deleted = 0
-        """, (dealer_id, part_no))
-        set_row = cur.fetchone()
-
-        total_scans = int(set_row[0] or 0)
-        total_points = int(set_row[1] or 0)
-
         completed_sets = total_scans // set_size
         remaining_scans = total_scans % set_size
 
-        cur.execute("""
-            SELECT id
-            FROM dealer_coupon_sets
-            WHERE dealer_id = %s
-              AND part_no = %s
-            LIMIT 1
-        """, (dealer_id, part_no))
-        existing_set = cur.fetchone()
-
-        if existing_set:
-            cur.execute("""
-                UPDATE dealer_coupon_sets
-                SET
-                    total_scans = %s,
-                    set_size = %s,
-                    completed_sets = %s,
-                    remaining_scans = %s,
-                    total_points = %s,
-                    updated_at = NOW()
-                WHERE dealer_id = %s
-                  AND part_no = %s
-            """, (
-                total_scans,
-                set_size,
-                completed_sets,
-                remaining_scans,
-                total_points,
-                dealer_id,
-                part_no
-            ))
-        else:
-            cur.execute("""
-                INSERT INTO dealer_coupon_sets
-                (
-                    dealer_id,
-                    part_no,
-                    total_scans,
-                    set_size,
-                    completed_sets,
-                    remaining_scans,
-                    total_points,
-                    updated_at
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-            """, (
-                dealer_id,
-                part_no,
-                total_scans,
-                set_size,
-                completed_sets,
-                remaining_scans,
-                total_points
-            ))
-
-        mysql.connection.commit()
+        db.dealer_coupon_sets.update_one(
+            {
+                "dealer_id": dealer_id,
+                "part_no": part_no
+            },
+            {
+                "$set": {
+                    "dealer_id": dealer_id,
+                    "part_no": part_no,
+                    "total_scans": total_scans,
+                    "set_size": set_size,
+                    "completed_sets": completed_sets,
+                    "remaining_scans": remaining_scans,
+                    "total_points": total_points,
+                    "updated_at": now()
+                }
+            },
+            upsert=True
+        )
 
         return jsonify({
             "success": True,
             "message": f"Coupon scanned successfully. {points} points added.",
-            "coupon_code": coupon_code,
+            "coupon_code": coupon.get("code", code),
             "part_no": part_no,
             "points": points,
             "dealer_id": dealer_id,
@@ -3438,18 +3464,15 @@ def dealer_scan_coupon(code, dealer_id):
         }), 200
 
     except Exception as e:
-        mysql.connection.rollback()
+        current_app.logger.exception("Dealer scan error")
         return jsonify({
             "success": False,
             "message": f"Scan failed: {str(e)}"
         }), 500
 
-    finally:
-        cur.close()
-
 from flask import request, jsonify, current_app
 
-@admin_bp.route("/api/dealer/scanned-history/<int:dealer_id>", methods=["GET"])
+@admin_bp.route("/api/dealer/scanned-history/<dealer_id>", methods=["GET"])
 def dealer_scanned_history_api(dealer_id):
     mysql = current_app.config["MYSQL_INSTANCE"]
     cur = mysql.connection.cursor()
@@ -3503,7 +3526,7 @@ def dealer_scanned_history_api(dealer_id):
 
 from flask import jsonify, current_app
 
-@admin_bp.route("/api/dealer/sets/<int:dealer_id>", methods=["GET"])
+@admin_bp.route("/api/dealer/sets/<dealer_id>", methods=["GET"])
 def dealer_sets_api(dealer_id):
     mysql = current_app.config["MYSQL_INSTANCE"]
     cur = mysql.connection.cursor()
@@ -3680,7 +3703,7 @@ def manual_settlement():
 
 from flask import jsonify, current_app
 
-@admin_bp.route("/api/dealer/wallet/<int:dealer_id>", methods=["GET"])
+@admin_bp.route("/api/dealer/wallet/<dealer_id>", methods=["GET"])
 def dealer_wallet_api(dealer_id):
     mysql = current_app.config["MYSQL_INSTANCE"]
     cur = mysql.connection.cursor()
@@ -3958,7 +3981,7 @@ def redemption_history():
 
     return render_template("redemption_history.html", redemptions=rows)
 
-@admin_bp.route("/api/dealer/redemption-history/<int:dealer_id>", methods=["GET"])
+@admin_bp.route("/api/dealer/redemption-history/<dealer_id>", methods=["GET"])
 def dealer_redemption_history_api(dealer_id):
     mysql = current_app.config["MYSQL_INSTANCE"]
     cur = mysql.connection.cursor()
@@ -4008,7 +4031,7 @@ def dealer_redemption_history_api(dealer_id):
 
 from flask import jsonify
 
-@admin_bp.route("/api/dealer/banners/<int:dealer_id>", methods=["GET"])
+@admin_bp.route("/api/dealer/banners/<dealer_id>", methods=["GET"])
 def dealer_banners_api(dealer_id):
     mysql = current_app.config["MYSQL_INSTANCE"]
     cur = mysql.connection.cursor()
@@ -4071,7 +4094,7 @@ from werkzeug.utils import secure_filename
 from flask import request, jsonify, current_app, url_for
 
 @csrf.exempt
-@admin_bp.route("/api/dealer/upload-profile-image/<int:dealer_id>", methods=["POST"])
+@admin_bp.route("/api/dealer/upload-profile-image/<dealer_id>", methods=["POST"])
 def upload_profile_image(dealer_id):
     try:
         token = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
@@ -4267,7 +4290,7 @@ def add_entity(entity_type):
     return redirect(url_for(f"admin.company_admin_{entity_type}_page"))
 
 
-@admin_bp.route("/company-admin/<entity_type>/edit/<int:record_id>", methods=["GET", "POST"])
+@admin_bp.route("/company-admin/<entity_type>/edit/<record_id>", methods=["GET", "POST"])
 def edit_entity(entity_type, record_id):
     if not _check_company_admin():
         return redirect(url_for("auth.login"))
@@ -4387,7 +4410,7 @@ def edit_entity(entity_type, record_id):
     )
 
 
-@admin_bp.route("/company-admin/<entity_type>/delete/<int:record_id>", methods=["POST"])
+@admin_bp.route("/company-admin/<entity_type>/delete/<record_id>", methods=["POST"])
 def delete_entity(entity_type, record_id):
     if not _check_company_admin():
         return redirect(url_for("auth.login"))
@@ -4421,7 +4444,7 @@ def delete_entity(entity_type, record_id):
     return redirect(url_for(f"admin.company_admin_{entity_type}_page"))
 
 
-@admin_bp.route("/company-admin/distributors/edit/<int:distributor_id>", methods=["GET", "POST"])
+@admin_bp.route("/company-admin/distributors/edit/<distributor_id>", methods=["GET", "POST"])
 def edit_distributor(distributor_id):
     if "user_id" not in session or session.get("user_role") not in ["admin", "sales"]:
         flash("Please login first.", "warning")
@@ -4598,7 +4621,7 @@ def edit_distributor(distributor_id):
         edit_distributor=distributor
     )
 
-@admin_bp.route("/company-admin/retailers/edit/<int:retailer_id>", methods=["GET", "POST"])
+@admin_bp.route("/company-admin/retailers/edit/<retailer_id>", methods=["GET", "POST"])
 def edit_retailer(retailer_id):
     if "user_id" not in session or session.get("user_role") != "admin":
         flash("Please login first.", "warning")

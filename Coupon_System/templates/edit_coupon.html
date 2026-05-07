@@ -4,6 +4,7 @@
 {% block content %}
 <div class="dashboard-page">
     <div class="container py-5">
+
         <div class="mb-3">
             <a href="{{ url_for('admin.coupon_list') }}" class="btn back-btn">
                 <i class="fa-solid fa-arrow-left"></i> Back to Coupon List
@@ -14,54 +15,70 @@
             <h4>Edit Coupon</h4>
 
             <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
                 <div class="row g-3">
+
                     <div class="col-md-6">
                         <label class="form-label custom-label">Product Name</label>
-                        <input type="text" name="product_name" class="form-control modern-input" value="{{ c[2] }}" required>
+                        <input type="text" name="product_name" class="form-control modern-input"
+                               value="{{ coupon.product_name }}" required>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label custom-label">Product Type</label>
-                        <input type="text" name="product_type" class="form-control modern-input" value="{{ c[3] }}" required>
+                        <input type="text" name="product_type" class="form-control modern-input"
+                               value="{{ coupon.product_type }}" required>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label custom-label">Part No</label>
-                        <input type="text" name="part_no" class="form-control modern-input" value="{{ c[4] }}" required>
+                        <input type="text" name="part_no" class="form-control modern-input"
+                               value="{{ coupon.part_no }}" required>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label custom-label">MRP</label>
-                        <input type="number" step="0.01" name="mrp" class="form-control modern-input" value="{{ c[5] }}" required>
+                        <input type="number" step="0.01" name="mrp" class="form-control modern-input"
+                               value="{{ coupon.mrp }}" required>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label custom-label">DLP</label>
-                        <input type="number" step="0.01" name="dlp" class="form-control modern-input" value="{{ c[6] }}" required>
+                        <input type="number" step="0.01" name="dlp" class="form-control modern-input"
+                               value="{{ coupon.dlp }}" required>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label custom-label">Pack Size</label>
-                        <input type="text" name="pack_size" class="form-control modern-input" value="{{ c[7] }}" required>
+                        <input type="text" name="pack_size" class="form-control modern-input"
+                               value="{{ coupon.pack_size }}" required>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label custom-label">Reward Value</label>
-                        <input type="number" name="points" class="form-control modern-input" value="{{ c[8] }}" required>
+                        <input type="number" name="points" class="form-control modern-input"
+                               value="{{ coupon.points }}" required>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label custom-label">Coupon Size</label>
                         <select name="qr_size" class="form-select modern-input" required>
-                            <option value="25x50" {% if c[9] == "25x50" %}selected{% endif %}>25 × 50 mm</option>
-                            <option value="50x50" {% if c[9] == "50x50" %}selected{% endif %}>50 × 50 mm</option>
+                            <option value="25x50" {% if coupon.qr_size == "25x50" %}selected{% endif %}>
+                                25 × 50 mm
+                            </option>
+                            <option value="50x50" {% if coupon.qr_size == "50x50" %}selected{% endif %}>
+                                50 × 50 mm
+                            </option>
                         </select>
                     </div>
+
                 </div>
 
                 <button class="btn flowra-btn w-100 mt-4">Update Coupon</button>
             </form>
         </div>
+
     </div>
 </div>
 {% endblock %}
