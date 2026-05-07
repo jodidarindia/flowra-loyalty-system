@@ -632,7 +632,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> loadBanners() async {
     try {
-      final data = await ApiService.getDealerBanners(widget.dealer["id"] ?? 0);
+      final data = await ApiService.getDealerBanners(widget.dealer["id"].toString());
       if (!mounted) return;
       setState(() {
         banners = data;
@@ -1090,7 +1090,7 @@ class _DealerProfileScreenState extends State<DealerProfileScreen> {
       final file = File(pickedFile.path);
 
       final data = await ApiService.uploadDealerProfileImage(
-        dealer["id"] ?? 0,
+        dealer["id"].toString(),
         file,
       );
 

@@ -3,8 +3,10 @@ import random
 import string
 import csv
 import io
+from bson.objectid import ObjectId
 from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
+from flask import get_db
 #import razorpay
 import os
 import config
@@ -40,20 +42,16 @@ auth_bp = Blueprint("auth", __name__)
 # ------------------------------
 def table_columns(table_name):
     """
-    Returns a set of column names for the given table.
-    Prevents crashes when code expects columns that are missing in DB.
+    MongoDB me schema fixed nahi hota,
+    isliye compatibility ke liye empty set return kar rahe hain.
     """
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
-    try:
-        cur.execute(f"SHOW COLUMNS FROM {table_name}")
-        rows = cur.fetchall()
-        return {row[0] for row in rows}
-    except Exception:
-        return set()
-    finally:
-        cur.close()
+    return set()
 
+def oid(value):
+    try:
+        return ObjectId(value)
+    except:
+        return value
 
 def has_column(table_name, column_name):
     return column_name in table_columns(table_name)
@@ -86,54 +84,48 @@ def build_select_query(table_name, wanted_columns, order_by=None, where_clause=N
     return query
 
 
-def safe_insert_subscription(user_id, plan, billing_cycle, days, is_trial, payment_status="paid", status_value="active"):
-    """
-    Insert into subscriptions table while handling old DB schemas gracefully.
-    """
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+from datetime import datetime, timedelta
 
-    cols = table_columns("subscriptions")
+def safe_insert_subscription(
+    user_id,
+    plan,
+    billing_cycle,
+    days,
+    is_trial,
+    payment_status="paid",
+    status_value="active"
+):
+    db = get_db()
 
-    insert_cols = ["user_id", "plan", "start_date", "end_date"]
-    insert_vals = ["%s", "%s", "NOW()", f"DATE_ADD(NOW(), INTERVAL {days} DAY)"]
-    params = [user_id, plan]
+    start_date = datetime.utcnow()
+    end_date = start_date + timedelta(days=int(days))
 
-    if "billing_cycle" in cols:
-        insert_cols.append("billing_cycle")
-        insert_vals.append("%s")
-        params.append(billing_cycle)
+    subscription_data = {
+        "user_id": str(user_id),
+        "plan": plan,
+        "billing_cycle": billing_cycle,
+        "is_trial": bool(is_trial),
+        "payment_status": payment_status,
+        "status": status_value,
+        "start_date": start_date,
+        "end_date": end_date,
+        "created_at": start_date,
+        "is_deleted": 0
+    }
 
-    if "is_trial" in cols:
-        insert_cols.append("is_trial")
-        insert_vals.append("%s")
-        params.append(1 if is_trial else 0)
+    result = db.subscriptions.insert_one(subscription_data)
 
-    if "payment_status" in cols:
-        insert_cols.append("payment_status")
-        insert_vals.append("%s")
-        params.append(payment_status)
-
-    if "status" in cols:
-        insert_cols.append("status")
-        insert_vals.append("%s")
-        params.append(status_value)
-
-    query = f"""
-        INSERT INTO subscriptions
-        ({', '.join(insert_cols)})
-        VALUES ({', '.join(insert_vals)})
-    """
-    cur.execute(query, tuple(params))
-    cur.close()
+    return str(result.inserted_id)
 
 
 def is_active(user_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
-
-    subs_cols = table_columns("subscriptions")
-
+    db = get_db()
+    subscription = db.subscriptions.find_one({
+        "user_id": str(user_id),
+        "end_date": {"$gt": datetime.utcnow()},
+        "is_deleted": 0
+    })
+    return bool(subscription)
     where_conditions = ["user_id=%s", "end_date > NOW()"]
     params = [user_id]
 
@@ -158,30 +150,17 @@ def generate_temp_password(length=8):
 
 
 def get_latest_active_subscription(user_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
+    subscription = db.subscriptions.find_one({
+        "user_id": str(user_id),
+        "end_date": {"$gt": datetime.utcnow()},
+        "is_deleted": 0
+    })
+    return subscription
 
-    wanted = ["id", "plan", "billing_cycle", "start_date", "end_date", "is_trial", "status"]
-    subs_cols = table_columns("subscriptions")
 
-    where_conditions = ["user_id = %s", "end_date > NOW()"]
-    params = [user_id]
+    
 
-    if "status" in subs_cols:
-        where_conditions.append("status = 'active'")
-
-    query = build_select_query(
-        "subscriptions",
-        wanted,
-        order_by="id DESC",
-        where_clause=f"WHERE {' AND '.join(where_conditions)}",
-        limit_clause="1"
-    )
-
-    cur.execute(query, tuple(params))
-    row = cur.fetchone()
-    cur.close()
-    return row
 
 
 def is_subscription_active(user_id):
@@ -215,9 +194,14 @@ FLOWRA Team
 # ------------------------------
 # Decorators
 # ------------------------------
+from functools import wraps
+from flask import session, flash, redirect, url_for, current_app
+from bson.objectid import ObjectId
+
 def login_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
+
         if "user_id" not in session:
             flash("Please login first.", "warning")
             return redirect(url_for("auth.login"))
@@ -230,18 +214,18 @@ def login_required(f):
             flash("Session expired. Please login again.", "warning")
             return redirect(url_for("auth.login"))
 
-        mysql = current_app.config["MYSQL_INSTANCE"]
-        cur = mysql.connection.cursor()
-        cur.execute("""
-            SELECT active_session_token
-            FROM users
-            WHERE id = %s
-            LIMIT 1
-        """, (user_id,))
-        row = cur.fetchone()
-        cur.close()
+        db = get_db()
 
-        db_token = row[0] if row else None
+        try:
+            user = db.users.find_one({
+                "_id": ObjectId(user_id)
+            })
+        except:
+            user = db.users.find_one({
+                "_id": user_id
+            })
+
+        db_token = user.get("active_session_token") if user else None
 
         if not db_token or db_token != session_token:
             session.clear()
@@ -249,31 +233,32 @@ def login_required(f):
             return redirect(url_for("auth.login"))
 
         return f(*args, **kwargs)
+
     return wrapper
 
 
+from datetime import datetime
+
 def has_active_subscription(user_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
-    subs_cols = table_columns("subscriptions")
+    subscription = db.subscriptions.find_one({
+        "user_id": str(user_id),
+        "end_date": {"$gt": datetime.utcnow()},
+        "$or": [
+            {"status": "active"},
+            {"status": {"$exists": False}},
+            {"status": None}
+        ],
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
-    where_conditions = ["user_id = %s", "end_date > NOW()"]
-    params = [user_id]
-
-    if "status" in subs_cols:
-        where_conditions.append("status = 'active'")
-
-    cur.execute(f"""
-        SELECT id
-        FROM subscriptions
-        WHERE {' AND '.join(where_conditions)}
-        LIMIT 1
-    """, tuple(params))
-    row = cur.fetchone()
-    cur.close()
-
-    return bool(row)
+    return bool(subscription)
 
 
 def check_trial_access(user):
@@ -283,10 +268,17 @@ def check_trial_access(user):
     return True
 
 
+from functools import wraps
+from flask import session, flash, redirect, url_for
+from bson.objectid import ObjectId
+
 def role_required(*allowed_roles):
+
     def decorator(f):
+
         @wraps(f)
         def wrapper(*args, **kwargs):
+
             if "user_id" not in session:
                 flash("Please login first.", "warning")
                 return redirect(url_for("auth.login"))
@@ -299,24 +291,24 @@ def role_required(*allowed_roles):
                 flash("Session expired. Please login again.", "warning")
                 return redirect(url_for("auth.login"))
 
-            mysql = current_app.config["MYSQL_INSTANCE"]
-            cur = mysql.connection.cursor()
-            cur.execute("""
-                SELECT active_session_token, role
-                FROM users
-                WHERE id = %s
-                LIMIT 1
-            """, (user_id,))
-            row = cur.fetchone()
-            cur.close()
+            db = get_db()
 
-            if not row:
+            try:
+                user = db.users.find_one({
+                    "_id": ObjectId(user_id)
+                })
+            except:
+                user = db.users.find_one({
+                    "_id": user_id
+                })
+
+            if not user:
                 session.clear()
                 flash("User not found. Please login again.", "danger")
                 return redirect(url_for("auth.login"))
 
-            db_token = row[0]
-            db_role = (row[1] or "").strip().lower()
+            db_token = user.get("active_session_token")
+            db_role = (user.get("role") or "").strip().lower()
 
             if db_token != session_token:
                 session.clear()
@@ -324,12 +316,15 @@ def role_required(*allowed_roles):
                 return redirect(url_for("auth.login"))
 
             allowed = [r.strip().lower() for r in allowed_roles]
+
             if db_role not in allowed:
                 flash("Unauthorized access.", "danger")
                 return redirect(url_for("auth.login"))
 
             return f(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -346,6 +341,7 @@ def pricing():
 # ------------------------------
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
+
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         email = request.form.get("email", "").strip().lower()
@@ -356,41 +352,43 @@ def register():
             flash("Please fill all required fields.", "danger")
             return redirect(url_for("auth.register"))
 
-        mysql = current_app.config["MYSQL_INSTANCE"]
-        cur = mysql.connection.cursor()
+        db = get_db()
 
-        cur.execute("""
-            SELECT id
-            FROM users
-            WHERE email = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            LIMIT 1
-        """, (email,))
-        existing = cur.fetchone()
+        existing = db.users.find_one({
+            "email": email,
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
 
         if existing:
-            cur.close()
             flash("Email already registered. Please login.", "warning")
             return redirect(url_for("auth.login"))
 
         try:
             hashed_password = generate_password_hash(password)
 
-            cur.execute("""
-                INSERT INTO users
-                (name, email, phone, password, role, company_id, is_online, is_deleted, trial_used, account_type)
-                VALUES (%s, %s, %s, %s, %s, NULL, 0, 0, 0, %s)
-            """, (name, email, phone, hashed_password, "user", "paid"))
-
-            mysql.connection.commit()
-            cur.close()
+            db.users.insert_one({
+                "name": name,
+                "email": email,
+                "phone": phone,
+                "password": hashed_password,
+                "role": "user",
+                "company_id": None,
+                "is_online": 0,
+                "is_deleted": 0,
+                "trial_used": 0,
+                "account_type": "paid",
+                "created_at": datetime.utcnow()
+            })
 
             flash("Signup successful. Please login.", "success")
             return redirect(url_for("auth.login"))
 
         except Exception as e:
-            mysql.connection.rollback()
-            cur.close()
             flash(f"Registration failed: {str(e)}", "danger")
             return redirect(url_for("auth.register"))
 
@@ -402,6 +400,7 @@ def register():
 # ------------------------------
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
+
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "").strip()
@@ -410,59 +409,51 @@ def login():
             flash("Please enter email and password.", "danger")
             return redirect(url_for("auth.login"))
 
-        mysql = current_app.config["MYSQL_INSTANCE"]
-        cur = mysql.connection.cursor()
+        db = get_db()
 
-        cur.execute("""
-            SELECT 
-                u.id,
-                u.name,
-                u.email,
-                u.password,
-                u.role,
-                u.company_id,
-                c.name,
-                u.account_type
-            FROM users u
-            LEFT JOIN companies c ON u.company_id = c.id
-            WHERE LOWER(u.email) = LOWER(%s)
-              AND (u.is_deleted = 0 OR u.is_deleted IS NULL)
-            ORDER BY u.id DESC
-            LIMIT 1
-        """, (email,))
-        user = cur.fetchone()
+        user = db.users.find_one({
+            "email": email,
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        }, sort=[("_id", -1)])
 
         if not user:
-            cur.close()
             flash("Invalid email or password.", "danger")
             return redirect(url_for("auth.login"))
 
-        user_id = user[0]
-        user_name = user[1]
-        user_email = user[2]
-        user_password = user[3]
-        user_role = (user[4] or "").strip().lower()
-        company_id = user[5]
-        company_name = user[6]
-        account_type = (user[7] or "paid").strip().lower()
+        user_id = str(user.get("_id"))
+        user_name = user.get("name", "")
+        user_email = user.get("email", "")
+        user_password = user.get("password", "")
+        user_role = (user.get("role") or "").strip().lower()
+        company_id = user.get("company_id")
+        account_type = (user.get("account_type") or "paid").strip().lower()
 
-        if not check_password_hash(user_password, password):
-            cur.close()
+        company_name = ""
+        if company_id:
+            company = db.companies.find_one({"_id": oid(company_id)})
+            company_name = company.get("name", "") if company else ""
+
+        if not user_password or not check_password_hash(user_password, password):
             flash("Invalid email or password.", "danger")
             return redirect(url_for("auth.login"))
 
         new_session_token = secrets.token_hex(32)
 
-        cur.execute("""
-            UPDATE users
-            SET last_login = NOW(),
-                is_online = 1,
-                active_session_token = %s
-            WHERE id = %s
-        """, (new_session_token, user_id))
-
-        mysql.connection.commit()
-        cur.close()
+        db.users.update_one(
+            {"_id": user["_id"]},
+            {
+                "$set": {
+                    "last_login": datetime.utcnow(),
+                    "is_online": 1,
+                    "active_session_token": new_session_token
+                }
+            }
+        )
 
         session.clear()
         session.permanent = True
@@ -477,11 +468,12 @@ def login():
         session["account_type"] = account_type
 
         latest_sub = get_latest_active_subscription(user_id)
+
         if latest_sub:
-            session["plan"] = latest_sub[1]
-            session["billing_cycle"] = latest_sub[2] if len(latest_sub) > 2 else None
-            session["subscription_end_date"] = str(latest_sub[4]) if len(latest_sub) > 4 else None
-            session["is_trial"] = bool(latest_sub[5]) if len(latest_sub) > 5 and latest_sub[5] is not None else False
+            session["plan"] = latest_sub.get("plan")
+            session["billing_cycle"] = latest_sub.get("billing_cycle")
+            session["subscription_end_date"] = str(latest_sub.get("end_date"))
+            session["is_trial"] = bool(latest_sub.get("is_trial", False))
         else:
             session["is_trial"] = False
 
@@ -509,12 +501,10 @@ def login():
 # Start Free Trial (only once, 24 hrs)
 # User can take trial any time after signup
 # ------------------------------
-from datetime import timedelta
-import secrets
-
 @auth_bp.route("/start-free-trial", methods=["POST"])
 @login_required
 def start_free_trial():
+
     base_user_id = session.get("user_id")
     base_user_role = (session.get("user_role") or "").strip().lower()
 
@@ -526,84 +516,65 @@ def start_free_trial():
         flash("Invalid account for free trial.", "warning")
         return redirect(url_for("auth.pricing"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
     try:
-        # original/base user fetch
-        cur.execute("""
-            SELECT id, name, email, phone, password, trial_used
-            FROM users
-            WHERE id = %s
-            LIMIT 1
-        """, (base_user_id,))
-        row = cur.fetchone()
+        base_user = db.users.find_one({"_id": oid(base_user_id)})
 
-        if not row:
-            cur.close()
+        if not base_user:
             flash("User not found.", "danger")
             return redirect(url_for("auth.login"))
 
-        base_name = (row[1] or "").strip() or "Trial User"
-        base_email = (row[2] or "").strip().lower()
-        base_phone = row[3] or ""
-        hashed_password = row[4]
-        trial_used = int(row[5] or 0)
+        base_name = (base_user.get("name") or "").strip() or "Trial User"
+        base_email = (base_user.get("email") or "").strip().lower()
+        base_phone = base_user.get("phone", "")
+        hashed_password = base_user.get("password", "")
+        trial_used = int(base_user.get("trial_used") or 0)
 
-        # ---------------------------------------------------
-        # STEP 1: If already used, check if active trial admin exists
-        # ---------------------------------------------------
+        trial_admin_email = f"trial_{base_user_id}_{base_email}"
+
         if trial_used == 1:
-            trial_admin_email = f"trial_{base_user_id}_{base_email}"
-
-            cur.execute("""
-                SELECT id, company_id
-                FROM users
-                WHERE email = %s
-                  AND role = 'admin'
-                  AND account_type = 'trial'
-                  AND (is_deleted = 0 OR is_deleted IS NULL)
-                LIMIT 1
-            """, (trial_admin_email,))
-            trial_admin = cur.fetchone()
+            trial_admin = db.users.find_one({
+                "email": trial_admin_email,
+                "role": "admin",
+                "account_type": "trial",
+                "$or": [
+                    {"is_deleted": 0},
+                    {"is_deleted": False},
+                    {"is_deleted": {"$exists": False}},
+                    {"is_deleted": None}
+                ]
+            })
 
             if trial_admin:
-                trial_admin_user_id = trial_admin[0]
-                company_id = trial_admin[1]
+                trial_admin_user_id = str(trial_admin.get("_id"))
+                company_id = trial_admin.get("company_id")
 
-                cur.execute("""
-                    SELECT name
-                    FROM companies
-                    WHERE id = %s
-                    LIMIT 1
-                """, (company_id,))
-                company_row = cur.fetchone()
-                company_name = company_row[0] if company_row else f"{base_name} Trial Company"
+                company_name = f"{base_name} Trial Company"
+                if company_id:
+                    company = db.companies.find_one({"_id": oid(company_id)})
+                    if company:
+                        company_name = company.get("name", company_name)
 
-                # active subscription check
-                cur.execute("""
-                    SELECT id
-                    FROM subscriptions
-                    WHERE user_id = %s
-                      AND end_date > NOW()
-                      AND status = 'active'
-                    LIMIT 1
-                """, (trial_admin_user_id,))
-                active_trial = cur.fetchone()
+                active_trial = db.subscriptions.find_one({
+                    "user_id": trial_admin_user_id,
+                    "status": "active",
+                    "end_date": {"$gt": datetime.utcnow()}
+                })
 
                 if active_trial:
                     new_session_token = secrets.token_hex(32)
 
-                    cur.execute("""
-                        UPDATE users
-                        SET last_login = NOW(),
-                            is_online = 1,
-                            active_session_token = %s
-                        WHERE id = %s
-                    """, (new_session_token, trial_admin_user_id))
-
-                    mysql.connection.commit()
-                    cur.close()
+                    db.users.update_one(
+                        {"_id": trial_admin["_id"]},
+                        {
+                            "$set": {
+                                "last_login": datetime.utcnow(),
+                                "is_online": 1,
+                                "active_session_token": new_session_token
+                            }
+                        }
+                    )
 
                     session.clear()
                     session.permanent = True
@@ -622,36 +593,35 @@ def start_free_trial():
                     flash("Your free trial is still active.", "success")
                     return redirect(url_for("admin.company_admin_dashboard"))
 
-            cur.close()
             flash("Free trial already used.", "warning")
             return redirect(url_for("auth.pricing"))
 
-        # ---------------------------------------------------
-        # STEP 2: No trial used yet → create new clean trial admin
-        # ---------------------------------------------------
         company_name = f"{base_name} Trial Company"
-        cur.execute("""
-            INSERT INTO companies (name, status)
-            VALUES (%s, %s)
-        """, (company_name, "Active"))
-        company_id = cur.lastrowid
 
-        trial_admin_email = f"trial_{base_user_id}_{base_email}"
+        company_result = db.companies.insert_one({
+            "name": company_name,
+            "status": "Active",
+            "is_deleted": 0,
+            "created_at": datetime.utcnow()
+        })
 
-        cur.execute("""
-            INSERT INTO users
-            (name, email, phone, password, role, company_id, is_online, is_deleted, trial_used, account_type)
-            VALUES (%s, %s, %s, %s, %s, %s, 0, 0, 1, %s)
-        """, (
-            base_name,
-            trial_admin_email,
-            base_phone,
-            hashed_password,
-            "admin",
-            company_id,
-            "trial"
-        ))
-        trial_admin_user_id = cur.lastrowid
+        company_id = str(company_result.inserted_id)
+
+        trial_admin_result = db.users.insert_one({
+            "name": base_name,
+            "email": trial_admin_email,
+            "phone": base_phone,
+            "password": hashed_password,
+            "role": "admin",
+            "company_id": company_id,
+            "is_online": 0,
+            "is_deleted": 0,
+            "trial_used": 1,
+            "account_type": "trial",
+            "created_at": datetime.utcnow()
+        })
+
+        trial_admin_user_id = str(trial_admin_result.inserted_id)
 
         safe_insert_subscription(
             user_id=trial_admin_user_id,
@@ -663,23 +633,28 @@ def start_free_trial():
             status_value="active"
         )
 
-        cur.execute("""
-            UPDATE users
-            SET trial_used = 1
-            WHERE id = %s
-        """, (base_user_id,))
-
         new_session_token = secrets.token_hex(32)
-        cur.execute("""
-            UPDATE users
-            SET last_login = NOW(),
-                is_online = 1,
-                active_session_token = %s
-            WHERE id = %s
-        """, (new_session_token, trial_admin_user_id))
 
-        mysql.connection.commit()
-        cur.close()
+        db.users.update_one(
+            {"_id": oid(base_user_id)},
+            {
+                "$set": {
+                    "trial_used": 1,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+
+        db.users.update_one(
+            {"_id": oid(trial_admin_user_id)},
+            {
+                "$set": {
+                    "last_login": datetime.utcnow(),
+                    "is_online": 1,
+                    "active_session_token": new_session_token
+                }
+            }
+        )
 
         session.clear()
         session.permanent = True
@@ -699,10 +674,12 @@ def start_free_trial():
         return redirect(url_for("admin.company_admin_dashboard"))
 
     except Exception as e:
-        mysql.connection.rollback()
-        cur.close()
         flash(f"Could not start free trial: {str(e)}", "danger")
         return redirect(url_for("auth.pricing"))
+
+    except Exception as e:
+     flash(f"Could not start free trial: {str(e)}", "danger")
+    return redirect(url_for("auth.pricing"))
 
 
 # ------------------------------
@@ -710,11 +687,6 @@ def start_free_trial():
 # ------------------------------
 @auth_bp.route("/subscription", methods=["GET", "POST"])
 def subscription():
-    from flask import request, render_template, flash, redirect, url_for, current_app
-    import os, secrets
-    from werkzeug.utils import secure_filename
-
-    mysql = current_app.config["MYSQL_INSTANCE"]
 
     # GET → form open
     if request.method == "GET":
@@ -727,18 +699,18 @@ def subscription():
             selected_cycle=cycle
         )
 
-    # POST → form submit
-    company_name = request.form.get("company_name")
-    contact_person = request.form.get("contact_person")
-    email = request.form.get("email")
-    phone = request.form.get("phone")
-    gst_number = request.form.get("gst_number")
-    address = request.form.get("address")
-    preferred_plan = request.form.get("preferred_plan")
-    billing_cycle = request.form.get("billing_cycle")
-    message = request.form.get("message")
+    db = get_db()
 
-    # 🔥 FILE UPLOAD
+    company_name = request.form.get("company_name", "").strip()
+    contact_person = request.form.get("contact_person", "").strip()
+    email = request.form.get("email", "").strip().lower()
+    phone = request.form.get("phone", "").strip()
+    gst_number = request.form.get("gst_number", "").strip()
+    address = request.form.get("address", "").strip()
+    preferred_plan = request.form.get("preferred_plan", "").strip()
+    billing_cycle = request.form.get("billing_cycle", "").strip()
+    message = request.form.get("message", "").strip()
+
     payment_file = request.files.get("payment_screenshot")
 
     if not payment_file or payment_file.filename == "":
@@ -747,52 +719,33 @@ def subscription():
 
     upload_folder = os.path.join(
         current_app.root_path,
-        "static/uploads/payment_screenshots"
+        "static",
+        "uploads",
+        "payment_screenshots"
     )
     os.makedirs(upload_folder, exist_ok=True)
 
     filename = secure_filename(payment_file.filename)
     unique_name = f"{secrets.token_hex(8)}_{filename}"
+
     payment_file.save(os.path.join(upload_folder, unique_name))
 
-    # 🔥 INSERT DB
-    cur = mysql.connection.cursor()
-
-    cur.execute("""
-        INSERT INTO subscription_enquiries
-        (
-            company_name,
-            contact_person,
-            email,
-            phone,
-            gst_number,
-            address,
-            preferred_plan,
-            billing_cycle,
-            message,
-            payment_status,
-            status,
-            payment_screenshot,
-            created_at
-        )
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
-    """, (
-        company_name,
-        contact_person,
-        email,
-        phone,
-        gst_number,
-        address,
-        preferred_plan,
-        billing_cycle,
-        message,
-        "pending",
-        "pending",
-        unique_name
-    ))
-
-    mysql.connection.commit()
-    cur.close()
+    db.subscription_enquiries.insert_one({
+        "company_name": company_name,
+        "contact_person": contact_person,
+        "email": email,
+        "phone": phone,
+        "gst_number": gst_number,
+        "address": address,
+        "preferred_plan": preferred_plan,
+        "billing_cycle": billing_cycle,
+        "message": message,
+        "payment_status": "pending",
+        "status": "pending",
+        "payment_screenshot": unique_name,
+        "created_at": datetime.utcnow(),
+        "is_deleted": 0
+    })
 
     flash("Subscription request submitted successfully!", "success")
     return redirect(url_for("auth.pricing"))
@@ -804,105 +757,85 @@ def subscription_success():
     return render_template("subscription_success.html")
 
 
+
+
 # ------------------------------
 # Super Admin Dashboard
 # ------------------------------
 @auth_bp.route("/super-admin/dashboard")
 @login_required
 def super_admin_dashboard():
+
     if session.get("user_role") != "super_admin":
         flash("Unauthorized access.", "danger")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
+
+    active_filter = {
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }
 
     try:
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM companies
-            WHERE is_deleted = 0 OR is_deleted IS NULL
-        """)
-        total_companies = cur.fetchone()[0] or 0
+        total_companies = db.companies.count_documents(active_filter)
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM companies
-            WHERE (is_deleted = 0 OR is_deleted IS NULL)
-              AND status = 'Active'
-        """)
-        active_companies = cur.fetchone()[0] or 0
+        active_companies = db.companies.count_documents({
+            **active_filter,
+            "status": "Active"
+        })
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM subscription_enquiries
-            WHERE status = 'pending' OR status IS NULL
-        """)
-        pending_enquiries = cur.fetchone()[0] or 0
+        pending_enquiries = db.subscription_enquiries.count_documents({
+            "$or": [
+                {"status": "pending"},
+                {"status": {"$exists": False}},
+                {"status": None}
+            ]
+        })
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM subscriptions
-            WHERE status = 'active'
-              AND payment_status = 'paid'
-              AND end_date > NOW()
-        """)
-        total_paid_subscriptions = cur.fetchone()[0] or 0
+        total_paid_subscriptions = db.subscriptions.count_documents({
+            "status": "active",
+            "payment_status": "paid",
+            "end_date": {"$gt": datetime.utcnow()}
+        })
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM users
-            WHERE role = 'admin'
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-        """)
-        total_admins = cur.fetchone()[0] or 0
+        total_admins = db.users.count_documents({
+            "role": "admin",
+            **active_filter
+        })
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM subscription_enquiries
-            WHERE status IN ('approved', 'converted')
-        """)
-        converted_enquiries = cur.fetchone()[0] or 0
+        converted_enquiries = db.subscription_enquiries.count_documents({
+            "status": {"$in": ["approved", "converted"]}
+        })
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM users
-            WHERE account_type = 'trial'
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-        """)
-        total_trial_accounts = cur.fetchone()[0] or 0
+        total_trial_accounts = db.users.count_documents({
+            "account_type": "trial",
+            **active_filter
+        })
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM subscriptions
-            WHERE plan = 'starter'
-              AND status = 'active'
-              AND end_date > NOW()
-        """)
-        starter_count = cur.fetchone()[0] or 0
+        starter_count = db.subscriptions.count_documents({
+            "plan": "starter",
+            "status": "active",
+            "end_date": {"$gt": datetime.utcnow()}
+        })
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM subscriptions
-            WHERE plan = 'professional'
-              AND status = 'active'
-              AND end_date > NOW()
-        """)
-        professional_count = cur.fetchone()[0] or 0
+        professional_count = db.subscriptions.count_documents({
+            "plan": "professional",
+            "status": "active",
+            "end_date": {"$gt": datetime.utcnow()}
+        })
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM subscriptions
-            WHERE plan = 'enterprise'
-              AND status = 'active'
-              AND end_date > NOW()
-        """)
-        enterprise_count = cur.fetchone()[0] or 0
-
-        cur.close()
+        enterprise_count = db.subscriptions.count_documents({
+            "plan": "enterprise",
+            "status": "active",
+            "end_date": {"$gt": datetime.utcnow()}
+        })
 
     except Exception as e:
-        cur.close()
         flash(f"Dashboard error: {str(e)}", "danger")
 
         total_companies = 0
@@ -929,149 +862,222 @@ def super_admin_dashboard():
         professional_count=professional_count,
         enterprise_count=enterprise_count
     )
-
 @auth_bp.route("/super-admin/payment-review")
 @login_required
 def super_admin_payment_review():
+
     if session.get("user_role") != "super_admin":
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
-    cur.execute("""
-        SELECT id, company_name, contact_person, email, phone,
-               preferred_plan, billing_cycle, payment_screenshot,
-               payment_status, status, created_at
-        FROM subscription_enquiries
-        WHERE status = 'pending' OR status IS NULL
-        ORDER BY id DESC
-    """)
-    enquiries = cur.fetchall()
-    cur.close()
+    rows = db.subscription_enquiries.find({
+        "$or": [
+            {"status": "pending"},
+            {"status": {"$exists": False}},
+            {"status": None}
+        ]
+    }).sort("_id", -1)
 
-    return render_template("payment_review.html", enquiries=enquiries)
+    enquiries = []
+
+    for r in rows:
+        enquiries.append((
+            str(r.get("_id")),
+            r.get("company_name", ""),
+            r.get("contact_person", ""),
+            r.get("email", ""),
+            r.get("phone", ""),
+            r.get("preferred_plan", ""),
+            r.get("billing_cycle", ""),
+            r.get("payment_screenshot", ""),
+            r.get("payment_status", ""),
+            r.get("status", "pending"),
+            r.get("created_at")
+        ))
+
+    return render_template(
+        "payment_review.html",
+        enquiries=enquiries
+    )
 
 
 
-@auth_bp.route("/approve-enquiry/<int:enquiry_id>", methods=["POST"])
+@auth_bp.route("/approve-enquiry/<enquiry_id>", methods=["POST"])
 @login_required
 def approve_enquiry(enquiry_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
 
-    cur.execute("""
-        UPDATE subscription_enquiries
-        SET status = 'approved',
-            payment_status = 'paid'
-        WHERE id = %s
-    """, (enquiry_id,))
+    if session.get("user_role") != "super_admin":
+        flash("Unauthorized access.", "danger")
+        return redirect(url_for("auth.login"))
 
-    mysql.connection.commit()
-    cur.close()
+    db = get_db()
 
-    flash("Payment Approved!", "success")
+    try:
+
+        db.subscription_enquiries.update_one(
+            {"_id": oid(enquiry_id)},
+            {
+                "$set": {
+                    "status": "approved",
+                    "payment_status": "paid",
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+
+        flash("Payment Approved!", "success")
+
+    except Exception as e:
+
+        flash(f"Failed to approve enquiry: {str(e)}", "danger")
+
     return redirect(url_for("auth.super_admin_payment_review"))
 
-@auth_bp.route("/reject-enquiry/<int:enquiry_id>", methods=["POST"])
+@auth_bp.route("/reject-enquiry/<enquiry_id>", methods=["POST"])
 @login_required
 def reject_enquiry(enquiry_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
 
-    cur.execute("""
-        UPDATE subscription_enquiries
-        SET status = 'rejected'
-        WHERE id = %s
-    """, (enquiry_id,))
+    if session.get("user_role") != "super_admin":
+        flash("Unauthorized access.", "danger")
+        return redirect(url_for("auth.login"))
 
-    mysql.connection.commit()
-    cur.close()
+    db = get_db()
 
-    flash("Enquiry Rejected!", "danger")
+    try:
+
+        db.subscription_enquiries.update_one(
+            {"_id": oid(enquiry_id)},
+            {
+                "$set": {
+                    "status": "rejected",
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+
+        flash("Enquiry Rejected!", "danger")
+
+    except Exception as e:
+
+        flash(f"Failed to reject enquiry: {str(e)}", "danger")
+
     return redirect(url_for("auth.super_admin_payment_review"))
 
 @auth_bp.route("/super-admin/dispatch")
 @login_required
 def super_admin_dispatch():
+
     if session.get("user_role") != "super_admin":
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
-    cur.execute("""
-        SELECT id, company_name, contact_person, email, phone,
-               preferred_plan, billing_cycle, payment_status, status, created_at
-        FROM subscription_enquiries
-        WHERE status = 'approved'
-        ORDER BY id DESC
-    """)
-    enquiries = cur.fetchall()
-    cur.close()
+    rows = db.subscription_enquiries.find({
+        "status": "approved"
+    }).sort("_id", -1)
+
+    enquiries = []
+
+    for r in rows:
+        enquiries.append((
+            str(r.get("_id")),
+            r.get("company_name", ""),
+            r.get("contact_person", ""),
+            r.get("email", ""),
+            r.get("phone", ""),
+            r.get("preferred_plan", ""),
+            r.get("billing_cycle", ""),
+            r.get("payment_status", ""),
+            r.get("status", ""),
+            r.get("created_at")
+        ))
 
     return render_template("dispatch.html", enquiries=enquiries)
 
-@auth_bp.route("/send-credentials/<int:enquiry_id>", methods=["POST"])
+@auth_bp.route("/send-credentials/<enquiry_id>", methods=["POST"])
 @login_required
 def send_credentials(enquiry_id):
-    import random, string
+
+    import random
+    import string
     from werkzeug.security import generate_password_hash
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
-    # 🔥 enquiry data
-    cur.execute("""
-        SELECT company_name, contact_person, email
-        FROM subscription_enquiries
-        WHERE id = %s
-    """, (enquiry_id,))
-    data = cur.fetchone()
+    enquiry = db.subscription_enquiries.find_one({
+        "_id": oid(enquiry_id)
+    })
 
-    if not data:
+    if not enquiry:
         flash("Invalid request", "danger")
         return redirect(url_for("auth.super_admin_dispatch"))
 
-    company_name, name, email = data
+    company_name = enquiry.get("company_name", "")
+    name = enquiry.get("contact_person", "")
+    email = enquiry.get("email", "").strip().lower()
 
-    # 🔥 IMPORTANT: existing company find karo
-    cur.execute("""
-        SELECT id FROM companies
-        WHERE name = %s
-        LIMIT 1
-    """, (company_name,))
-    company = cur.fetchone()
+    company = db.companies.find_one({
+        "name": company_name
+    })
 
     if not company:
         flash("Company not found! Pehle company create karo.", "danger")
         return redirect(url_for("auth.super_admin_dispatch"))
 
-    company_id = company[0]
+    company_id = str(company["_id"])
 
-    # 🔥 password generate
-    password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+    existing_admin = db.users.find_one({
+        "email": email,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
+
+    if existing_admin:
+        flash("Admin already exists with this email.", "warning")
+        return redirect(url_for("auth.super_admin_dispatch"))
+
+    password = ''.join(
+        random.choices(
+            string.ascii_letters + string.digits,
+            k=8
+        )
+    )
+
     hashed_password = generate_password_hash(password)
 
-    # 🔥 admin create
-    cur.execute("""
-        INSERT INTO users
-        (name, email, password, role, company_id, account_type, is_deleted)
-        VALUES (%s, %s, %s, 'admin', %s, 'paid', 0)
-    """, (name, email, hashed_password, company_id))
+    user_result = db.users.insert_one({
+        "name": name,
+        "email": email,
+        "password": hashed_password,
+        "role": "admin",
+        "company_id": company_id,
+        "account_type": "paid",
+        "is_deleted": 0,
+        "is_online": 0,
+        "created_at": datetime.utcnow()
+    })
 
-    # 🔥 mark converted
-    cur.execute("""
-        UPDATE subscription_enquiries
-        SET status = 'converted'
-        WHERE id = %s
-    """, (enquiry_id,))
+    admin_user_id = str(user_result.inserted_id)
 
-    mysql.connection.commit()
-    cur.close()
+    db.subscription_enquiries.update_one(
+        {"_id": oid(enquiry_id)},
+        {
+            "$set": {
+                "status": "converted",
+                "converted_company_id": company_id,
+                "converted_admin_user_id": admin_user_id,
+                "converted_at": datetime.utcnow()
+            }
+        }
+    )
 
-    # 🔥 email
     try:
+
         from flask_mail import Message
         from app import mail
 
@@ -1079,6 +1085,7 @@ def send_credentials(enquiry_id):
             "Your FLOWRA Admin Account",
             recipients=[email]
         )
+
         msg.body = f"""
 Hello {name},
 
@@ -1092,41 +1099,47 @@ Login: http://127.0.0.1:5000/login
 
 - FLOWRA
 """
+
         mail.send(msg)
 
     except Exception as e:
         print("MAIL ERROR:", e)
 
     flash("Admin created & credentials sent!", "success")
+
     return redirect(url_for("auth.super_admin_dispatch"))
 
 
-@auth_bp.route("/mark-as-paid/<int:enquiry_id>", methods=["POST"])
+@auth_bp.route("/mark-as-paid/<enquiry_id>", methods=["POST"])
 @login_required
 def mark_as_paid(enquiry_id):
+
     if session.get("user_role") != "super_admin":
         flash("Unauthorized access.", "danger")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
     try:
-        cur.execute("""
-            UPDATE subscription_enquiries
-            SET payment_status = 'paid'
-            WHERE id = %s
-        """, (enquiry_id,))
 
-        mysql.connection.commit()
-        flash("Payment marked as paid. You can now approve and convert.", "success")
+        db.subscription_enquiries.update_one(
+            {"_id": oid(enquiry_id)},
+            {
+                "$set": {
+                    "payment_status": "paid",
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+
+        flash(
+            "Payment marked as paid. You can now approve and convert.",
+            "success"
+        )
 
     except Exception as e:
-        mysql.connection.rollback()
-        flash(f"Failed to mark as paid: {str(e)}", "danger")
 
-    finally:
-        cur.close()
+        flash(f"Failed to mark as paid: {str(e)}", "danger")
 
     return redirect(url_for("auth.super_admin_subscription_enquiries"))
 
@@ -1137,52 +1150,34 @@ def mark_as_paid(enquiry_id):
 @auth_bp.route("/super-admin/subscription-enquiries")
 @login_required
 def super_admin_subscription_enquiries():
+
     if session.get("user_role") != "super_admin":
         flash("Unauthorized access.", "danger")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
-    cur.execute("""
-        SELECT
-            id,
-            company_name,
-            contact_person,
-            email,
-            phone,
-            preferred_plan,
-            billing_cycle,
-            gst_number,
-            referral_code,
-            message,
-            payment_screenshot,
-            payment_status,
-            status,
-            created_at
-        FROM subscription_enquiries
-        ORDER BY id DESC
-    """)
-    rows = cur.fetchall()
-    cur.close()
+    rows = db.subscription_enquiries.find({}).sort("_id", -1)
 
     enquiries = []
+
     for r in rows:
+
         enquiries.append({
-            "id": r[0],
-            "company_name": r[1],
-            "contact_person": r[2],
-            "email": r[3],
-            "phone": r[4],
-            "preferred_plan": r[5],
-            "billing_cycle": r[6],
-            "gst_number": r[7],
-            "referral_code": r[8],
-            "message": r[9],
-            "payment_screenshot": r[10],
-            "payment_status": r[11],
-            "status": r[12] or "pending",
-            "created_at": r[13],
+            "id": str(r.get("_id")),
+            "company_name": r.get("company_name", ""),
+            "contact_person": r.get("contact_person", ""),
+            "email": r.get("email", ""),
+            "phone": r.get("phone", ""),
+            "preferred_plan": r.get("preferred_plan", ""),
+            "billing_cycle": r.get("billing_cycle", ""),
+            "gst_number": r.get("gst_number", ""),
+            "referral_code": r.get("referral_code", ""),
+            "message": r.get("message", ""),
+            "payment_screenshot": r.get("payment_screenshot", ""),
+            "payment_status": r.get("payment_status", ""),
+            "status": r.get("status", "pending"),
+            "created_at": r.get("created_at")
         })
 
     return render_template(
@@ -1198,49 +1193,52 @@ def super_admin_subscription_enquiries():
 @login_required
 @role_required("super_admin")
 def export_subscription_enquiries():
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
 
-    wanted = [
-        "id",
-        "company_name",
-        "contact_person",
-        "email",
-        "phone",
-        "gst_number",
-        "address",
-        "preferred_plan",
-        "billing_cycle",
-        "message",
-        "referral_code",
-        "payment_status",
-        "payment_id",
-        "order_id",
-        "status",
-        "created_at"
-    ]
+    db = get_db()
 
-    query = build_select_query(
-        "subscription_enquiries",
-        wanted,
-        order_by="id DESC"
-    )
-
-    cur.execute(query)
-    rows = cur.fetchall()
-    cur.close()
+    rows = db.subscription_enquiries.find({}).sort("_id", -1)
 
     output = io.StringIO()
     writer = csv.writer(output)
 
     writer.writerow([
-        "ID", "Company Name", "Contact Person", "Email", "Phone", "GST Number",
-        "Address", "Preferred Plan", "Billing Cycle", "Message", "Referral Code",
-        "Payment Status", "Payment ID", "Order ID", "Status", "Created At"
+        "ID",
+        "Company Name",
+        "Contact Person",
+        "Email",
+        "Phone",
+        "GST Number",
+        "Address",
+        "Preferred Plan",
+        "Billing Cycle",
+        "Message",
+        "Referral Code",
+        "Payment Status",
+        "Payment ID",
+        "Order ID",
+        "Status",
+        "Created At"
     ])
 
     for row in rows:
-        writer.writerow(list(row))
+        writer.writerow([
+            str(row.get("_id", "")),
+            row.get("company_name", ""),
+            row.get("contact_person", ""),
+            row.get("email", ""),
+            row.get("phone", ""),
+            row.get("gst_number", ""),
+            row.get("address", ""),
+            row.get("preferred_plan", ""),
+            row.get("billing_cycle", ""),
+            row.get("message", ""),
+            row.get("referral_code", ""),
+            row.get("payment_status", ""),
+            row.get("payment_id", ""),
+            row.get("order_id", ""),
+            row.get("status", ""),
+            row.get("created_at", "")
+        ])
 
     csv_data = output.getvalue()
     output.close()
@@ -1248,7 +1246,9 @@ def export_subscription_enquiries():
     return Response(
         csv_data,
         mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=subscription_enquiries.csv"}
+        headers={
+            "Content-Disposition": "attachment; filename=subscription_enquiries.csv"
+        }
     )
 
 
@@ -1259,83 +1259,66 @@ def coupon_home():
 # ------------------------------
 # Super Admin - Convert paid enquiry into real company admin
 # ------------------------------
-@auth_bp.route("/super-admin/subscription-enquiries/convert/<int:enquiry_id>", methods=["POST"])
+@auth_bp.route("/super-admin/subscription-enquiries/convert/<enquiry_id>", methods=["POST"])
 @login_required
 @role_required("super_admin")
 def convert_subscription_enquiry(enquiry_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+
+    db = get_db()
 
     try:
-        wanted = [
-            "id",
-            "company_name",
-            "contact_person",
-            "email",
-            "phone",
-            "preferred_plan",
-            "billing_cycle",
-            "payment_status",
-            "status"
-        ]
-
-        query = build_select_query(
-            "subscription_enquiries",
-            wanted,
-            where_clause="WHERE id = %s",
-            limit_clause="1"
-        )
-
-        cur.execute(query, (enquiry_id,))
-        enquiry = cur.fetchone()
+        enquiry = db.subscription_enquiries.find_one({
+            "_id": oid(enquiry_id)
+        })
 
         if not enquiry:
-            cur.close()
             flash("Enquiry not found.", "danger")
             return redirect(url_for("auth.super_admin_subscription_enquiries"))
 
-        enquiry_id_db = enquiry[0]
-        company_name = enquiry[1]
-        contact_person = enquiry[2]
-        email = enquiry[3]
-        phone = enquiry[4]
-        preferred_plan = enquiry[5] or "starter"
-        billing_cycle = (enquiry[6] or "monthly").strip().lower()
-        payment_status = (enquiry[7] or "paid").strip().lower()
-        status = (enquiry[8] or "pending").strip().lower()
+        company_name = enquiry.get("company_name", "").strip()
+        contact_person = enquiry.get("contact_person", "").strip()
+        email = enquiry.get("email", "").strip().lower()
+        phone = enquiry.get("phone", "").strip()
+        preferred_plan = enquiry.get("preferred_plan", "starter")
+        billing_cycle = (enquiry.get("billing_cycle") or "monthly").strip().lower()
+        payment_status = (enquiry.get("payment_status") or "paid").strip().lower()
+        status = (enquiry.get("status") or "pending").strip().lower()
 
         if payment_status not in ["paid", ""]:
-            cur.close()
             flash("This enquiry is not marked as paid.", "danger")
             return redirect(url_for("auth.super_admin_subscription_enquiries"))
 
         if status == "converted":
-            cur.close()
             flash("This enquiry is already converted.", "warning")
             return redirect(url_for("auth.super_admin_subscription_enquiries"))
 
-        cur.execute("""
-            INSERT INTO companies (name, status)
-            VALUES (%s, %s)
-        """, (company_name, "Active"))
-        company_id = cur.lastrowid
+        company_result = db.companies.insert_one({
+            "name": company_name,
+            "status": "Active",
+            "is_deleted": 0,
+            "created_at": datetime.utcnow()
+        })
+
+        company_id = str(company_result.inserted_id)
 
         temp_password = generate_temp_password(8)
         hashed_password = generate_password_hash(temp_password)
 
-        cur.execute("""
-            INSERT INTO users
-            (name, email, phone, password, role, company_id, is_online, is_deleted, trial_used)
-            VALUES (%s, %s, %s, %s, %s, %s, 0, 0, 1)
-        """, (
-            contact_person,
-            email,
-            phone,
-            hashed_password,
-            "admin",
-            company_id
-        ))
-        admin_user_id = cur.lastrowid
+        admin_result = db.users.insert_one({
+            "name": contact_person,
+            "email": email,
+            "phone": phone,
+            "password": hashed_password,
+            "role": "admin",
+            "company_id": company_id,
+            "is_online": 0,
+            "is_deleted": 0,
+            "trial_used": 1,
+            "account_type": "paid",
+            "created_at": datetime.utcnow()
+        })
+
+        admin_user_id = str(admin_result.inserted_id)
 
         if billing_cycle == "yearly":
             safe_insert_subscription(
@@ -1358,32 +1341,17 @@ def convert_subscription_enquiry(enquiry_id):
                 status_value="active"
             )
 
-        enquiry_cols = table_columns("subscription_enquiries")
-        update_parts = []
-        params = []
-
-        if "status" in enquiry_cols:
-            update_parts.append("status = %s")
-            params.append("converted")
-
-        if "converted_company_id" in enquiry_cols:
-            update_parts.append("converted_company_id = %s")
-            params.append(company_id)
-
-        if "converted_admin_user_id" in enquiry_cols:
-            update_parts.append("converted_admin_user_id = %s")
-            params.append(admin_user_id)
-
-        if update_parts:
-            params.append(enquiry_id_db)
-            cur.execute(f"""
-                UPDATE subscription_enquiries
-                SET {', '.join(update_parts)}
-                WHERE id = %s
-            """, tuple(params))
-
-        mysql.connection.commit()
-        cur.close()
+        db.subscription_enquiries.update_one(
+            {"_id": oid(enquiry_id)},
+            {
+                "$set": {
+                    "status": "converted",
+                    "converted_company_id": company_id,
+                    "converted_admin_user_id": admin_user_id,
+                    "converted_at": datetime.utcnow()
+                }
+            }
+        )
 
         send_company_credentials_email(
             to_email=email,
@@ -1397,8 +1365,6 @@ def convert_subscription_enquiry(enquiry_id):
         return redirect(url_for("auth.super_admin_subscription_enquiries"))
 
     except Exception as e:
-        mysql.connection.rollback()
-        cur.close()
         flash(f"Conversion failed: {str(e)}", "danger")
         return redirect(url_for("auth.super_admin_subscription_enquiries"))
 
@@ -1419,86 +1385,80 @@ def dashboard():
 
 @auth_bp.route("/buy-plan", methods=["POST"])
 def buy_plan():
+
     user_id = session.get("user_id")
 
     if not user_id:
         return redirect(url_for("auth.login"))
 
-    company = request.form.get("company_name")
-    plan = request.form.get("plan")
+    db = get_db()
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    company = request.form.get("company_name", "").strip()
+    plan = request.form.get("plan", "").strip()
 
-    enquiry_cols = table_columns("subscription_enquiries")
+    if not company or not plan:
+        flash("Company name and plan are required.", "danger")
+        return redirect(url_for("auth.dashboard"))
 
-    insert_cols = ["company_name", "preferred_plan"]
-    insert_vals = ["%s", "%s"]
-    params = [company, plan]
-
-    if "payment_status" in enquiry_cols:
-        insert_cols.append("payment_status")
-        insert_vals.append("%s")
-        params.append("paid")
-
-    if "status" in enquiry_cols:
-        insert_cols.append("status")
-        insert_vals.append("%s")
-        params.append("pending")
-
-    cur.execute(f"""
-        INSERT INTO subscription_enquiries
-        ({', '.join(insert_cols)})
-        VALUES ({', '.join(insert_vals)})
-    """, tuple(params))
-
-    mysql.connection.commit()
-    cur.close()
+    db.subscription_enquiries.insert_one({
+        "company_name": company,
+        "preferred_plan": plan,
+        "payment_status": "paid",
+        "status": "pending",
+        "created_by": user_id,
+        "created_at": datetime.utcnow(),
+        "is_deleted": 0
+    })
 
     flash("Plan request submitted!", "success")
     return redirect(url_for("auth.dashboard"))
 
 
-@auth_bp.route("/convert/<int:id>")
+@auth_bp.route("/convert/<id>")
 def convert_user(id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
 
-    wanted = ["company_name", "preferred_plan", "payment_status"]
-    query = build_select_query(
-        "subscription_enquiries",
-        wanted,
-        where_clause="WHERE id=%s",
-        limit_clause="1"
-    )
-    cur.execute(query, (id,))
-    enquiry = cur.fetchone()
+    db = get_db()
+
+    enquiry = db.subscription_enquiries.find_one({
+        "_id": oid(id)
+    })
 
     if not enquiry:
-        cur.close()
         flash("Payment not verified!", "danger")
         return redirect(url_for("auth.super_admin_dashboard"))
 
-    company_name = enquiry[0]
-    plan = enquiry[1]
-    payment_status = (enquiry[2] or "paid").strip().lower()
+    company_name = enquiry.get("company_name", "").strip()
+    plan = enquiry.get("preferred_plan", "starter")
+    payment_status = (enquiry.get("payment_status") or "paid").strip().lower()
 
     if payment_status not in ["paid", ""]:
-        cur.close()
         flash("Payment not verified!", "danger")
         return redirect(url_for("auth.super_admin_dashboard"))
 
     password = str(random.randint(100000, 999999))
+    hashed_password = generate_password_hash(password)
 
-    cur.execute("INSERT INTO companies (name) VALUES (%s)", (company_name,))
-    company_id = cur.lastrowid
+    company_result = db.companies.insert_one({
+        "name": company_name,
+        "status": "Active",
+        "is_deleted": 0,
+        "created_at": datetime.utcnow()
+    })
 
-    cur.execute("""
-        INSERT INTO users (email, password, role, company_id)
-        VALUES (%s, %s, 'admin', %s)
-    """, ("client@example.com", generate_password_hash(password), company_id))
+    company_id = str(company_result.inserted_id)
 
-    user_id = cur.lastrowid
+    user_result = db.users.insert_one({
+        "email": "client@example.com",
+        "password": hashed_password,
+        "role": "admin",
+        "company_id": company_id,
+        "is_deleted": 0,
+        "is_online": 0,
+        "account_type": "paid",
+        "created_at": datetime.utcnow()
+    })
+
+    user_id = str(user_result.inserted_id)
 
     safe_insert_subscription(
         user_id=user_id,
@@ -1510,16 +1470,17 @@ def convert_user(id):
         status_value="active"
     )
 
-    enquiry_cols = table_columns("subscription_enquiries")
-    if "status" in enquiry_cols:
-        cur.execute("""
-            UPDATE subscription_enquiries
-            SET status='converted'
-            WHERE id=%s
-        """, (id,))
-
-    mysql.connection.commit()
-    cur.close()
+    db.subscription_enquiries.update_one(
+        {"_id": oid(id)},
+        {
+            "$set": {
+                "status": "converted",
+                "converted_company_id": company_id,
+                "converted_admin_user_id": user_id,
+                "converted_at": datetime.utcnow()
+            }
+        }
+    )
 
     flash(f"User created. Password: {password}", "success")
     return redirect(url_for("auth.super_admin_dashboard"))
@@ -1532,34 +1493,48 @@ def convert_user(id):
 @login_required
 @role_required("super_admin")
 def super_admin_analytics():
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
 
-    cur.execute("SELECT COUNT(*) FROM companies WHERE is_deleted = 0")
-    total_companies = cur.fetchone()[0]
+    db = get_db()
 
-    cur.execute("""
-        SELECT COUNT(DISTINCT c.id)
-        FROM companies c
-        LEFT JOIN users u ON c.id = u.company_id
-        WHERE c.is_deleted = 0
-          AND u.is_online = 1
-    """)
-    active_companies = cur.fetchone()[0]
+    active_filter = {
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }
+
+    total_companies = db.companies.count_documents(active_filter)
+
+    online_company_ids = db.users.distinct(
+        "company_id",
+        {
+            "is_online": 1,
+            "company_id": {"$exists": True, "$ne": None},
+            **active_filter
+        }
+    )
+
+    active_companies = len(online_company_ids)
 
     inactive_companies = total_companies - active_companies
 
-    cur.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
-    total_admins = cur.fetchone()[0]
+    total_admins = db.users.count_documents({
+        "role": "admin",
+        **active_filter
+    })
 
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM users
-        WHERE role IN ('employee', 'qr_employee', 'sales')
-    """)
-    total_employees = cur.fetchone()[0]
-
-    cur.close()
+    total_employees = db.users.count_documents({
+        "role": {
+            "$in": [
+                "employee",
+                "qr_employee",
+                "sales"
+            ]
+        },
+        **active_filter
+    })
 
     return render_template(
         "super_admin_analytics.html",
@@ -1573,27 +1548,44 @@ def super_admin_analytics():
 
 @auth_bp.route("/signup", methods=["GET", "POST"])
 def signup():
+
     if request.method == "POST":
-        name = request.form.get("name")
-        email = request.form.get("email").lower()
-        password = request.form.get("password")
 
-        mysql = current_app.config["MYSQL_INSTANCE"]
-        cur = mysql.connection.cursor()
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "").strip()
 
-        cur.execute("SELECT id FROM users WHERE email=%s", (email,))
-        if cur.fetchone():
-            flash("Email already exists", "danger")
-            cur.close()
+        if not name or not email or not password:
+            flash("Please fill all fields.", "danger")
             return redirect(url_for("auth.signup"))
 
-        cur.execute("""
-            INSERT INTO users (name, email, password, role, trial_used)
-            VALUES (%s, %s, %s, 'user', 0)
-        """, (name, email, generate_password_hash(password)))
+        db = get_db()
 
-        mysql.connection.commit()
-        cur.close()
+        existing_user = db.users.find_one({
+            "email": email,
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
+
+        if existing_user:
+            flash("Email already exists", "danger")
+            return redirect(url_for("auth.signup"))
+
+        db.users.insert_one({
+            "name": name,
+            "email": email,
+            "password": generate_password_hash(password),
+            "role": "user",
+            "trial_used": 0,
+            "is_deleted": 0,
+            "is_online": 0,
+            "account_type": "paid",
+            "created_at": datetime.utcnow()
+        })
 
         flash("Signup successful. Login now.", "success")
         return redirect(url_for("auth.login"))
@@ -1603,24 +1595,37 @@ def signup():
 
 @auth_bp.route("/start-trial")
 def start_trial():
+
     user_id = session.get("user_id")
 
     if not user_id:
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
-    cur.execute("SELECT trial_used FROM users WHERE id=%s", (user_id,))
-    trial_used_row = cur.fetchone()
-    trial_used = trial_used_row[0] if trial_used_row else 0
+    user = db.users.find_one({
+        "_id": oid(user_id)
+    })
+
+    if not user:
+        flash("User not found.", "danger")
+        return redirect(url_for("auth.login"))
+
+    trial_used = int(user.get("trial_used") or 0)
 
     if trial_used == 1:
-        cur.close()
         flash("Free trial already used!", "warning")
         return redirect(url_for("auth.pricing"))
 
-    cur.execute("UPDATE users SET trial_used=1 WHERE id=%s", (user_id,))
+    db.users.update_one(
+        {"_id": oid(user_id)},
+        {
+            "$set": {
+                "trial_used": 1,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
 
     safe_insert_subscription(
         user_id=user_id,
@@ -1632,9 +1637,6 @@ def start_trial():
         status_value="active"
     )
 
-    mysql.connection.commit()
-    cur.close()
-
     flash("24-hour free trial started!", "success")
     return redirect(url_for("auth.dashboard"))
 
@@ -1643,11 +1645,11 @@ def start_trial():
 @login_required
 @role_required("super_admin")
 def create_company_from_enquiry():
+
     import secrets
     from werkzeug.security import generate_password_hash
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
     enquiry_id = request.form.get("enquiry_id")
     company_name = request.form.get("company_name", "").strip()
@@ -1658,24 +1660,26 @@ def create_company_from_enquiry():
     billing_cycle = request.form.get("billing_cycle", "monthly").strip().lower()
 
     try:
+
         if not enquiry_id or not company_name or not admin_name or not admin_email:
             flash("Please fill all required fields.", "danger")
             return redirect(url_for("auth.super_admin_subscription_enquiries"))
 
-        cur.execute("""
-            SELECT payment_status, status
-            FROM subscription_enquiries
-            WHERE id = %s
-            LIMIT 1
-        """, (enquiry_id,))
-        enquiry = cur.fetchone()
+        enquiry = db.subscription_enquiries.find_one({
+            "_id": oid(enquiry_id)
+        })
 
         if not enquiry:
             flash("Enquiry not found.", "danger")
             return redirect(url_for("auth.super_admin_subscription_enquiries"))
 
-        payment_status = (enquiry[0] or "pending").strip().lower()
-        current_status = (enquiry[1] or "pending").strip().lower()
+        payment_status = (
+            enquiry.get("payment_status", "pending")
+        ).strip().lower()
+
+        current_status = (
+            enquiry.get("status", "pending")
+        ).strip().lower()
 
         if payment_status != "paid":
             flash("Please mark payment as paid first.", "warning")
@@ -1685,54 +1689,66 @@ def create_company_from_enquiry():
             flash("This enquiry is already converted.", "warning")
             return redirect(url_for("auth.super_admin_subscription_enquiries"))
 
-        cur.execute("""
-            SELECT id
-            FROM users
-            WHERE LOWER(email) = LOWER(%s)
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            LIMIT 1
-        """, (admin_email,))
-        existing_user = cur.fetchone()
+        existing_user = db.users.find_one({
+            "email": admin_email,
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
 
         if existing_user:
             flash("This email is already used by another active account.", "danger")
             return redirect(url_for("auth.super_admin_subscription_enquiries"))
 
-        cur.execute("""
-            SELECT id
-            FROM companies
-            WHERE LOWER(name) = LOWER(%s)
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            LIMIT 1
-        """, (company_name,))
-        existing_company = cur.fetchone()
+        existing_company = db.companies.find_one({
+            "name": {
+                "$regex": f"^{company_name}$",
+                "$options": "i"
+            },
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
 
         if existing_company:
-            company_id = existing_company[0]
+            company_id = str(existing_company["_id"])
         else:
-            cur.execute("""
-                INSERT INTO companies (name, status)
-                VALUES (%s, 'Active')
-            """, (company_name,))
-            company_id = cur.lastrowid
+            company_result = db.companies.insert_one({
+                "name": company_name,
+                "status": "Active",
+                "is_deleted": 0,
+                "created_at": datetime.utcnow()
+            })
+
+            company_id = str(company_result.inserted_id)
 
         temp_password = secrets.token_urlsafe(8)
         hashed_password = generate_password_hash(temp_password)
 
-        cur.execute("""
-            INSERT INTO users
-            (name, email, phone, password, role, company_id, account_type, is_online, is_deleted, trial_used)
-            VALUES (%s, %s, %s, %s, 'admin', %s, 'paid', 0, 0, 0)
-        """, (
-            admin_name,
-            admin_email,
-            phone,
-            hashed_password,
-            company_id
-        ))
-        admin_user_id = cur.lastrowid
+        admin_result = db.users.insert_one({
+            "name": admin_name,
+            "email": admin_email,
+            "phone": phone,
+            "password": hashed_password,
+            "role": "admin",
+            "company_id": company_id,
+            "account_type": "paid",
+            "is_online": 0,
+            "is_deleted": 0,
+            "trial_used": 0,
+            "created_at": datetime.utcnow()
+        })
+
+        admin_user_id = str(admin_result.inserted_id)
 
         if billing_cycle == "yearly":
+
             safe_insert_subscription(
                 user_id=admin_user_id,
                 plan=plan,
@@ -1742,7 +1758,9 @@ def create_company_from_enquiry():
                 payment_status="paid",
                 status_value="active"
             )
+
         else:
+
             safe_insert_subscription(
                 user_id=admin_user_id,
                 plan=plan,
@@ -1753,18 +1771,21 @@ def create_company_from_enquiry():
                 status_value="active"
             )
 
-        cur.execute("""
-            UPDATE subscription_enquiries
-            SET status = 'converted',
-                payment_status = 'paid',
-                converted_company_id = %s,
-                converted_admin_user_id = %s
-            WHERE id = %s
-        """, (company_id, admin_user_id, enquiry_id))
-
-        mysql.connection.commit()
+        db.subscription_enquiries.update_one(
+            {"_id": oid(enquiry_id)},
+            {
+                "$set": {
+                    "status": "converted",
+                    "payment_status": "paid",
+                    "converted_company_id": company_id,
+                    "converted_admin_user_id": admin_user_id,
+                    "converted_at": datetime.utcnow()
+                }
+            }
+        )
 
         try:
+
             send_company_credentials_email(
                 to_email=admin_email,
                 contact_name=admin_name,
@@ -1772,17 +1793,24 @@ def create_company_from_enquiry():
                 login_email=admin_email,
                 temp_password=temp_password
             )
-            flash("Company/Admin created and credentials emailed.", "success")
+
+            flash(
+                "Company/Admin created and credentials emailed.",
+                "success"
+            )
+
         except Exception as mail_error:
-            flash(f"Company/Admin created. Email failed. Temporary password: {temp_password}", "warning")
+
+            flash(
+                f"Company/Admin created. Email failed. Temporary password: {temp_password}",
+                "warning"
+            )
+
             print("MAIL ERROR:", mail_error)
 
     except Exception as e:
-        mysql.connection.rollback()
-        flash(f"Company creation failed: {str(e)}", "danger")
 
-    finally:
-        cur.close()
+        flash(f"Company creation failed: {str(e)}", "danger")
 
     return redirect(url_for("auth.super_admin_subscription_enquiries"))
 
@@ -1919,18 +1947,28 @@ def create_company_from_enquiry():
 # ------------------------------
 @auth_bp.route("/logout")
 def logout():
+
     if "user_id" in session:
-        mysql = current_app.config["MYSQL_INSTANCE"]
-        cur = mysql.connection.cursor()
-        cur.execute("""
-            UPDATE users
-            SET is_online = 0,
-                active_session_token = NULL
-            WHERE id = %s
-        """, (session.get("user_id"),))
-        mysql.connection.commit()
-        cur.close()
+
+        db = get_db()
+
+        try:
+            db.users.update_one(
+                {"_id": oid(session.get("user_id"))},
+                {
+                    "$set": {
+                        "is_online": 0,
+                        "updated_at": datetime.utcnow()
+                    },
+                    "$unset": {
+                        "active_session_token": ""
+                    }
+                }
+            )
+        except Exception as e:
+            print("LOGOUT ERROR:", str(e))
 
     session.clear()
+
     flash("Logged out successfully.", "success")
     return redirect(url_for("auth.login"))

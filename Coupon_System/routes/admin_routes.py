@@ -1,5 +1,5 @@
 import code
-
+import time
 from bson import ObjectId
 from extensions import mail
 from datetime import datetime, timedelta
@@ -15,7 +15,10 @@ from werkzeug.security import generate_password_hash
 from utils.qr_generator import generate_qr
 import random
 import string
-import win32print
+try:
+    import win32print
+except ImportError:
+    win32print = None
 import secrets
 
 
@@ -32,6 +35,10 @@ print("admin_routes imported")
 PRINTER_NAME = "TSC TE244"
 
 def send_raw_to_usb_printer(raw_data: str):
+    if win32print is None:
+        print("Printer skipped on server")
+        return False
+
     hprinter = win32print.OpenPrinter(PRINTER_NAME)
     try:
         hjob = win32print.StartDocPrinter(hprinter, 1, ("Coupon Print", None, "RAW"))
@@ -43,6 +50,8 @@ def send_raw_to_usb_printer(raw_data: str):
             win32print.EndDocPrinter(hprinter)
     finally:
         win32print.ClosePrinter(hprinter)
+
+    return True
 
 def get_db():
     mongo = current_app.config["MONGO_INSTANCE"]
@@ -60,42 +69,22 @@ def oid(value):
         return value
 
 def has_active_subscription(user_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
-    cur.execute("""
-        SELECT id
-        FROM subscriptions
-        WHERE user_id = %s
-          AND status = 'active'
-          AND end_date > NOW()
-        LIMIT 1
-    """, (user_id,))
-    row = cur.fetchone()
-    cur.close()
+    sub = db.subscriptions.find_one({
+        "$or": [
+            {"user_id": user_id},
+            {"user_id": oid(user_id)}
+        ],
+        "status": "active",
+        "end_date": {"$gt": now()}
+    })
 
-    return bool(row)
+    return sub is not None
 
 def is_company_trial_expired(company_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    return not has_active_trial_for_company(company_id)
 
-    cur.execute("""
-        SELECT s.id
-        FROM subscriptions s
-        JOIN users u ON s.user_id = u.id
-        WHERE u.company_id = %s
-          AND u.account_type = 'trial'
-          AND u.role = 'admin'
-          AND s.status = 'active'
-          AND s.end_date > NOW()
-        LIMIT 1
-    """, (company_id,))
-
-    active_trial = cur.fetchone()
-    cur.close()
-
-    return not bool(active_trial)
 
 def block_if_trial_company_expired():
     company_id = session.get("company_id")
@@ -114,87 +103,101 @@ def block_if_trial_company_expired():
 
 
 def is_trial_company(company_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
-    cur.execute("""
-        SELECT id
-        FROM users
-        WHERE company_id = %s
-          AND role = 'admin'
-          AND account_type = 'trial'
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-        LIMIT 1
-    """, (company_id,))
+    admin = db.users.find_one({
+        "company_id": company_id,
+        "role": "admin",
+        "account_type": "trial",
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
-    row = cur.fetchone()
-    cur.close()
-    return bool(row)
+    return admin is not None
+
 
 def deactivate_expired_trial_company(company_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
     try:
-        cur.execute("""
-            UPDATE users
-            SET is_deleted = 1,
-                is_online = 0,
-                deleted_at = NOW()
-            WHERE company_id = %s
-              AND role IN ('admin', 'employee', 'qr_employee', 'sales')
-              AND account_type = 'trial'
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-        """, (company_id,))
+        db.users.update_many(
+            {
+                "company_id": company_id,
+                "role": {"$in": ["admin", "employee", "qr_employee", "sales"]},
+                "account_type": "trial",
+                "$or": [
+                    {"is_deleted": 0},
+                    {"is_deleted": False},
+                    {"is_deleted": {"$exists": False}},
+                    {"is_deleted": None}
+                ]
+            },
+            {
+                "$set": {
+                    "is_deleted": 1,
+                    "is_online": 0,
+                    "deleted_at": now()
+                }
+            }
+        )
 
-        mysql.connection.commit()
-        cur.close()
         return True
 
     except Exception as e:
-        mysql.connection.rollback()
-        cur.close()
         print("TRIAL COMPANY DEACTIVATE ERROR:", str(e))
         return False
-    
+
 
 def has_active_trial_for_company(company_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
-    cur.execute("""
-        SELECT s.id
-        FROM subscriptions s
-        JOIN users u ON s.user_id = u.id
-        WHERE u.company_id = %s
-          AND u.role = 'admin'
-          AND u.account_type = 'trial'
-          AND s.status = 'active'
-          AND s.end_date > NOW()
-        LIMIT 1
-    """, (company_id,))
+    admin = db.users.find_one({
+        "company_id": company_id,
+        "role": "admin",
+        "account_type": "trial",
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
-    row = cur.fetchone()
-    cur.close()
-    return bool(row)
-
-def is_trial_admin(user_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
-
-    cur.execute("""
-        SELECT account_type
-        FROM users
-        WHERE id = %s
-        LIMIT 1
-    """, (user_id,))
-    row = cur.fetchone()
-    cur.close()
-
-    if not row:
+    if not admin:
         return False
 
-    return (row[0] or "").strip().lower() == "trial"
+    admin_id = admin.get("_id")
+
+    active_trial = db.subscriptions.find_one({
+        "$or": [
+            {"user_id": str(admin_id)},
+            {"user_id": admin_id}
+        ],
+        "status": "active",
+        "end_date": {"$gt": now()}
+    })
+
+    return active_trial is not None
+
+
+def is_trial_admin(user_id):
+    db = get_db()
+
+    user = db.users.find_one({
+        "$or": [
+            {"_id": oid(user_id)},
+            {"id": user_id}
+        ]
+    })
+
+    if not user:
+        return False
+
+    return (user.get("account_type") or "").strip().lower() == "trial"
 
 
 
@@ -210,6 +213,7 @@ def build_coupon_zpl(part_no, mrp, pack_size, points, code, brand_name, qr_size=
 ^FO0,0^GB400,400,2^FS
 
 ^FO0,0^GB58,400,58^FS
+^FO8,20^A0B,28,28^FR^FD{brand_name}^FS
 
 ^FO78,20^A0N,30,30^FD{part_no}^FS
 ^FO79,20^A0N,30,30^FD{part_no}^FS
@@ -242,7 +246,7 @@ def build_coupon_zpl(part_no, mrp, pack_size, points, code, brand_name, qr_size=
 ^FO0,0^GB400,200,2^FS
 
 ^FO0,0^GB58,200,58^FS
-^FO8,15^A0B,24,24^FD{brand_name}^FS
+^FO8,15^A0B,24,24^FR^FD{brand_name}^FS
 
 ^FO74,10^A0N,26,26^FD{part_no}^FS
 ^FO75,10^A0N,26,26^FD{part_no}^FS
@@ -308,23 +312,17 @@ def _get_entity_label(entity_type: str) -> str:
 
 
 def verify_dealer_token(dealer_id, token):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
-
-    cur.execute("""
-        SELECT active_token
-        FROM distributors
-        WHERE id = %s
-        LIMIT 1
-    """, (dealer_id,))
-    row = cur.fetchone()
-    cur.close()
-
-    if not row:
+    if not dealer_id or not token:
         return False
 
-    db_token = row[0]
-    return bool(db_token and db_token == token)
+    db = get_db()
+
+    dealer = db.distributors.find_one({
+        "_id": oid(dealer_id),
+        "active_token": token
+    })
+
+    return dealer is not None
 
 
 def _get_entity_template(entity_type: str) -> str:
@@ -336,88 +334,71 @@ def _get_entity_template(entity_type: str) -> str:
     return mapping.get(entity_type, "company_admin_distributors.html")
 
 
-def _fetch_entities(entity_type: str, company_id: int):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+def _fetch_entities(entity_type: str, company_id):
+    db = get_db()
 
-    cur.execute(f"""
-        SELECT
-            id,
-            dealer_code,
-            name,
-            mobile,
-            email,
-            pan,
-            gst,
-            city,
-            state,
-            address
-        FROM {entity_type}
-        WHERE company_id = %s
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-        ORDER BY id DESC
-    """, (company_id,))
+    if entity_type not in ["distributors", "retailers", "mechanics"]:
+        return []
 
-    rows = cur.fetchall()
-    cur.close()
+    rows = db[entity_type].find({
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }).sort("_id", -1)
 
     data = []
     for row in rows:
         data.append({
-            "id": row[0],
-            "dealer_code": row[1] or "",
-            "name": row[2] or "",
-            "mobile": row[3] or "",
-            "email": row[4] or "",
-            "pan": row[5] or "",
-            "gst": row[6] or "",
-            "city": row[7] or "",
-            "state": row[8] or "",
-            "address": row[9] or "",
+            "id": str(row.get("_id")),
+            "dealer_code": row.get("dealer_code", ""),
+            "name": row.get("name", ""),
+            "mobile": row.get("mobile", ""),
+            "email": row.get("email", ""),
+            "pan": row.get("pan", ""),
+            "gst": row.get("gst", ""),
+            "city": row.get("city", ""),
+            "state": row.get("state", ""),
+            "address": row.get("address", ""),
         })
+
     return data
 
 
-def _fetch_single_entity(entity_type: str, company_id: int, record_id: int):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+def _fetch_single_entity(entity_type: str, company_id, record_id):
+    db = get_db()
 
-    cur.execute(f"""
-        SELECT
-            id,
-            dealer_code,
-            name,
-            mobile,
-            email,
-            pan,
-            gst,
-            city,
-            state,
-            address
-        FROM {entity_type}
-        WHERE id = %s
-          AND company_id = %s
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-        LIMIT 1
-    """, (record_id, company_id))
+    if entity_type not in ["distributors", "retailers", "mechanics"]:
+        return None
 
-    row = cur.fetchone()
-    cur.close()
+    row = db[entity_type].find_one({
+        "_id": oid(record_id),
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
     if not row:
         return None
 
     return {
-        "id": row[0],
-        "dealer_code": row[1] or "",
-        "name": row[2] or "",
-        "mobile": row[3] or "",
-        "email": row[4] or "",
-        "pan": row[5] or "",
-        "gst": row[6] or "",
-        "city": row[7] or "",
-        "state": row[8] or "",
-        "address": row[9] or "",
+        "id": str(row.get("_id")),
+        "dealer_code": row.get("dealer_code", ""),
+        "name": row.get("name", ""),
+        "mobile": row.get("mobile", ""),
+        "email": row.get("email", ""),
+        "pan": row.get("pan", ""),
+        "gst": row.get("gst", ""),
+        "city": row.get("city", ""),
+        "state": row.get("state", ""),
+        "address": row.get("address", ""),
     }
 
 @admin_bp.route("/super-admin/companies", methods=["GET", "POST"])
@@ -426,12 +407,12 @@ def company_management():
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
 
     if request.method == "POST":
         company_name = request.form.get("company_name", "").strip()
         admin_name = request.form.get("admin_name", "").strip()
-        admin_email = request.form.get("admin_email", "").strip()
+        admin_email = request.form.get("admin_email", "").strip().lower()
         admin_password = request.form.get("admin_password", "").strip()
         status = request.form.get("status", "Active").strip()
 
@@ -439,59 +420,81 @@ def company_management():
             flash("Please fill all required fields.", "danger")
             return redirect(url_for("admin.company_management"))
 
-        cur = mysql.connection.cursor()
-
-        cur.execute("SELECT id FROM users WHERE email = %s", (admin_email,))
-        existing = cur.fetchone()
+        existing = db.users.find_one({
+            "email": admin_email,
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
 
         if existing:
-            cur.close()
             flash("Admin email already exists!", "danger")
             return redirect(url_for("admin.company_management"))
 
         try:
             hashed_password = generate_password_hash(admin_password)
 
-            cur.execute(
-                "INSERT INTO companies (name, status) VALUES (%s, %s)",
-                (company_name, status)
-            )
-            company_id = cur.lastrowid
+            company_result = db.companies.insert_one({
+                "name": company_name,
+                "status": status,
+                "is_deleted": 0,
+                "created_at": now()
+            })
 
-            cur.execute(
-                "INSERT INTO users (name, email, password, role, company_id, is_online, is_deleted) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (admin_name, admin_email, hashed_password, "admin", company_id, 0, 0)
-            )
+            company_id = str(company_result.inserted_id)
 
-            mysql.connection.commit()
-            cur.close()
+            db.users.insert_one({
+                "name": admin_name,
+                "email": admin_email,
+                "password": hashed_password,
+                "role": "admin",
+                "company_id": company_id,
+                "is_online": 0,
+                "is_deleted": 0,
+                "account_type": "paid",
+                "created_at": now()
+            })
 
             flash("Company created successfully.", "success")
             return redirect(url_for("admin.company_management"))
 
         except Exception as e:
-            cur.close()
             flash(f"Error creating company: {str(e)}", "danger")
             return redirect(url_for("admin.company_management"))
 
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        SELECT c.id, c.name, c.status, u.name
-        FROM companies c
-        LEFT JOIN users u ON c.id = u.company_id AND u.role = 'admin'
-        WHERE c.is_deleted = 0
-        ORDER BY c.id DESC
-    """)
-    rows = cur.fetchall()
-    cur.close()
+    companies_cursor = db.companies.find({
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }).sort("_id", -1)
 
     companies = []
-    for row in rows:
+
+    for company in companies_cursor:
+        company_id = str(company.get("_id"))
+
+        admin = db.users.find_one({
+            "company_id": company_id,
+            "role": "admin",
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
+
         companies.append({
-            "id": row[0],
-            "name": row[1],
-            "status": row[2],
-            "admin": row[3] if row[3] else "N/A"
+            "id": company_id,
+            "name": company.get("name", ""),
+            "status": company.get("status", "Active"),
+            "admin": admin.get("name", "N/A") if admin else "N/A"
         })
 
     return render_template("company_management.html", companies=companies)
@@ -507,11 +510,10 @@ def manage_employees():
     if expired_redirect:
         return expired_redirect
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
+
     company_id = session.get("company_id")
     admin_account_type = session.get("account_type", "paid")
-
-    cur = mysql.connection.cursor()
 
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -522,72 +524,77 @@ def manage_employees():
         allowed_roles = ["employee", "qr_employee", "sales"]
 
         if not name or not email or not password or not role:
-            cur.close()
             flash("Please fill all fields.", "danger")
             return redirect(url_for("admin.manage_employees"))
 
         if role not in allowed_roles:
-            cur.close()
             flash("Invalid role selected.", "danger")
             return redirect(url_for("admin.manage_employees"))
 
+        existing_user = db.users.find_one({
+            "email": email,
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
+
+        if existing_user:
+            flash("Email already exists. Please use a different email.", "danger")
+            return redirect(url_for("admin.manage_employees"))
+
         try:
-            cur.execute("""
-                SELECT id
-                FROM users
-                WHERE email = %s
-                  AND (is_deleted = 0 OR is_deleted IS NULL)
-                LIMIT 1
-            """, (email,))
-            existing_user = cur.fetchone()
-
-            if existing_user:
-                cur.close()
-                flash("Email already exists. Please use a different email.", "danger")
-                return redirect(url_for("admin.manage_employees"))
-
             hashed_password = generate_password_hash(password)
 
-            cur.execute("""
-                INSERT INTO users
-                (name, email, password, role, company_id, is_online, is_deleted, account_type, trial_used)
-                VALUES (%s, %s, %s, %s, %s, 0, 0, %s, 0)
-            """, (
-                name,
-                email,
-                hashed_password,
-                role,
-                company_id,
-                admin_account_type
-            ))
-
-            mysql.connection.commit()
-            cur.close()
+            db.users.insert_one({
+                "name": name,
+                "email": email,
+                "password": hashed_password,
+                "role": role,
+                "company_id": company_id,
+                "is_online": 0,
+                "is_deleted": 0,
+                "account_type": admin_account_type,
+                "trial_used": 0,
+                "created_at": now()
+            })
 
             flash("Employee created successfully!", "success")
             return redirect(url_for("admin.manage_employees"))
 
         except Exception as e:
-            mysql.connection.rollback()
-            cur.close()
             flash(f"Error creating employee: {str(e)}", "danger")
             return redirect(url_for("admin.manage_employees"))
 
-    cur.execute("""
-        SELECT id, name, email, role
-        FROM users
-        WHERE company_id = %s
-          AND role IN ('employee', 'qr_employee', 'sales')
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-        ORDER BY id DESC
-    """, (company_id,))
-    employees = cur.fetchall()
-    cur.close()
+    employees_cursor = db.users.find({
+        "company_id": company_id,
+        "role": {
+            "$in": ["employee", "qr_employee", "sales"]
+        },
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }).sort("_id", -1)
+
+    employees = []
+
+    for emp in employees_cursor:
+        employees.append({
+            "id": str(emp.get("_id")),
+            "name": emp.get("name", ""),
+            "email": emp.get("email", ""),
+            "role": emp.get("role", "")
+        })
 
     return render_template("manage_employees.html", employees=employees)
 
 
-@admin_bp.route("/company-admin/employee/delete/<int:employee_id>", methods=["POST"])
+@admin_bp.route("/company-admin/employee/delete/<employee_id>", methods=["POST"])
 def delete_employee(employee_id):
     if "user_id" not in session or session.get("user_role") != "admin":
         flash("Please login first.", "warning")
@@ -597,30 +604,35 @@ def delete_employee(employee_id):
     if expired_redirect:
         return expired_redirect
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
     try:
-        cur = mysql.connection.cursor()
-        cur.execute("""
-            UPDATE users
-            SET is_deleted = 1,
-                deleted_at = NOW(),
-                is_online = 0
-            WHERE id = %s
-              AND company_id = %s
-              AND role IN ('employee', 'qr_employee', 'sales')
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-        """, (employee_id, company_id))
+        result = db.users.update_one(
+            {
+                "_id": oid(employee_id),
+                "company_id": company_id,
+                "role": {"$in": ["employee", "qr_employee", "sales"]},
+                "$or": [
+                    {"is_deleted": 0},
+                    {"is_deleted": False},
+                    {"is_deleted": {"$exists": False}},
+                    {"is_deleted": None}
+                ]
+            },
+            {
+                "$set": {
+                    "is_deleted": 1,
+                    "deleted_at": now(),
+                    "is_online": 0
+                }
+            }
+        )
 
-        mysql.connection.commit()
-
-        if cur.rowcount == 0:
-            cur.close()
+        if result.modified_count == 0:
             flash("Employee not found or delete not allowed.", "danger")
             return redirect(url_for("admin.manage_employees"))
 
-        cur.close()
         flash("Employee removed successfully.", "success")
 
     except Exception as e:
@@ -629,76 +641,99 @@ def delete_employee(employee_id):
     return redirect(url_for("admin.manage_employees"))
 
 
-@admin_bp.route("/super-admin/company/edit/<int:company_id>", methods=["GET", "POST"])
+@admin_bp.route("/super-admin/company/edit/<company_id>", methods=["GET", "POST"])
 def edit_company(company_id):
     if "user_id" not in session or session.get("user_role") != "super_admin":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
+
+    company = db.companies.find_one({
+        "_id": oid(company_id),
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
+
+    if not company:
+        flash("Company not found.", "danger")
+        return redirect(url_for("admin.company_management"))
 
     if request.method == "POST":
         company_name = request.form.get("company_name", "").strip()
         status = request.form.get("status", "").strip()
         admin_name = request.form.get("admin_name", "").strip()
 
-        cur.execute(
-            "UPDATE companies SET name = %s, status = %s WHERE id = %s",
-            (company_name, status, company_id)
+        db.companies.update_one(
+            {"_id": oid(company_id)},
+            {
+                "$set": {
+                    "name": company_name,
+                    "status": status,
+                    "updated_at": now()
+                }
+            }
         )
 
-        cur.execute(
-            "UPDATE users SET name = %s WHERE company_id = %s AND role = 'admin'",
-            (admin_name, company_id)
+        db.users.update_one(
+            {
+                "company_id": str(company.get("_id")),
+                "role": "admin"
+            },
+            {
+                "$set": {
+                    "name": admin_name,
+                    "updated_at": now()
+                }
+            }
         )
-
-        mysql.connection.commit()
-        cur.close()
 
         flash("Company updated successfully.", "success")
         return redirect(url_for("admin.company_management"))
 
-    cur.execute("""
-        SELECT c.id, c.name, c.status, u.name
-        FROM companies c
-        LEFT JOIN users u ON c.id = u.company_id AND u.role = 'admin'
-        WHERE c.id = %s
-        LIMIT 1
-    """, (company_id,))
-    row = cur.fetchone()
-    cur.close()
+    admin = db.users.find_one({
+        "company_id": str(company.get("_id")),
+        "role": "admin"
+    })
 
-    if not row:
-        flash("Company not found.", "danger")
-        return redirect(url_for("admin.company_management"))
-
-    company = {
-        "id": row[0],
-        "name": row[1],
-        "status": row[2],
-        "admin_name": row[3] if row[3] else ""
+    company_data = {
+        "id": str(company.get("_id")),
+        "name": company.get("name", ""),
+        "status": company.get("status", ""),
+        "admin_name": admin.get("name", "") if admin else ""
     }
 
-    return render_template("edit_company.html", company=company)
+    return render_template("edit_company.html", company=company_data)
 
 
-@admin_bp.route("/super-admin/company/delete/<int:company_id>", methods=["POST"])
+@admin_bp.route("/super-admin/company/delete/<company_id>", methods=["POST"])
 def delete_company(company_id):
     if "user_id" not in session or session.get("user_role") != "super_admin":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
 
     try:
-        cur = mysql.connection.cursor()
-        cur.execute(
-            "UPDATE companies SET is_deleted = 1, deleted_at = NOW() WHERE id = %s",
-            (company_id,)
+        result = db.companies.update_one(
+            {
+                "_id": oid(company_id)
+            },
+            {
+                "$set": {
+                    "is_deleted": 1,
+                    "deleted_at": now()
+                }
+            }
         )
-        mysql.connection.commit()
-        cur.close()
+
+        if result.modified_count == 0:
+            flash("Company not found.", "danger")
+            return redirect(url_for("admin.company_management"))
 
         flash("Company removed from list successfully.", "success")
 
@@ -745,7 +780,7 @@ def qr_employee_generate():
             while db.coupons.find_one({"code": code}):
                 code = generate_code(16)
 
-            qr_data = f"https://192.168.1.13:5000/scan/{code}"
+            qr_data = request.host_url.rstrip("/") + f"/scan/{code}"
             filename = f"{code}.png"
             qr_path = generate_qr(qr_data, filename)
 
@@ -777,68 +812,80 @@ def qr_employee_generate():
 
 @admin_bp.route("/employee/dashboard")
 def general_employee_dashboard():
+
     if "user_id" not in session or session.get("user_role") != "employee":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
-    cur = mysql.connection.cursor()
 
     # Pending redemptions
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM coupons
-        WHERE company_id = %s
-          AND scanned_at IS NOT NULL
-          AND status = 'scanned'
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-    """, (company_id,))
-    pending_redemptions = cur.fetchone()[0] or 0
+    pending_redemptions = db.coupons.count_documents({
+        "company_id": company_id,
+        "scanned_at": {"$ne": None},
+        "status": "scanned",
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
     # Redeemed coupons
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM coupons
-        WHERE company_id = %s
-          AND status IN ('redeemed','material_redeemed','credit_note_issued','credit_note')
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-    """, (company_id,))
-    redeemed_count = cur.fetchone()[0] or 0
+    redeemed_count = db.coupons.count_documents({
+        "company_id": company_id,
+        "status": {
+            "$in": [
+                "redeemed",
+                "material_redeemed",
+                "credit_note_issued",
+                "credit_note"
+            ]
+        },
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
     # Total dealers
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM distributors
-        WHERE company_id = %s
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-    """, (company_id,))
-    total_dealers = cur.fetchone()[0] or 0
+    total_dealers = db.distributors.count_documents({
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
-    # ✅ FIX: wallet points from wallet table (not coupons)
-    cur.execute("""
-        SELECT COALESCE(SUM(total_points), 0)
-        FROM dealer_wallets
-    """)
-    total_wallet_points = cur.fetchone()[0] or 0
+    # Wallet points
+    pipeline = [
+        {
+            "$group": {
+                "_id": None,
+                "total": {"$sum": "$total_points"}
+            }
+        }
+    ]
 
-    # extra stats
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM coupons
-        WHERE company_id = %s
-          AND scanned_at IS NOT NULL
-    """, (company_id,))
-    total_scans = cur.fetchone()[0] or 0
+    wallet_result = list(db.dealer_wallets.aggregate(pipeline))
+    total_wallet_points = wallet_result[0]["total"] if wallet_result else 0
 
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM coupons
-        WHERE company_id = %s
-    """, (company_id,))
-    total_coupons = cur.fetchone()[0] or 0
+    # Total scans
+    total_scans = db.coupons.count_documents({
+        "company_id": company_id,
+        "scanned_at": {"$ne": None}
+    })
 
-    cur.close()
+    # Total coupons
+    total_coupons = db.coupons.count_documents({
+        "company_id": company_id
+    })
 
     return render_template(
         "general_employee_dashboard.html",
@@ -937,7 +984,7 @@ def import_excel_qr():
                 except Exception:
                     reward_value = 0
 
-                qr_data = f"https://192.168.1.13:5000/scan/{code}"
+                qr_data = request.host_url.rstrip("/") + f"/scan/{code}"
                 filename = f"{code}.png"
                 qr_path = generate_qr(qr_data, filename)
 
@@ -1103,17 +1150,24 @@ def delete_coupon(id):
 
     return redirect(url_for("admin.coupon_list"))
 
-@admin_bp.route("/company-admin/employee/edit/<int:employee_id>", methods=["GET", "POST"])
+@admin_bp.route("/company-admin/employee/edit/<employee_id>", methods=["GET", "POST"])
 def edit_employee(employee_id):
+
     if "user_id" not in session or session.get("user_role") != "admin":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
-    cur = mysql.connection.cursor()
+
+    try:
+        employee_obj_id = ObjectId(employee_id)
+    except:
+        flash("Invalid employee ID.", "danger")
+        return redirect(url_for("admin.manage_employees"))
 
     if request.method == "POST":
+
         name = request.form.get("name", "").strip()
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "").strip()
@@ -1122,101 +1176,101 @@ def edit_employee(employee_id):
         allowed_roles = ["employee", "qr_employee", "sales"]
 
         if not name or not email or not role:
-            cur.close()
             flash("Please fill all required fields.", "danger")
             return redirect(url_for("admin.edit_employee", employee_id=employee_id))
 
         if role not in allowed_roles:
-            cur.close()
             flash("Invalid role selected.", "danger")
             return redirect(url_for("admin.edit_employee", employee_id=employee_id))
 
         try:
+
             # same email kisi aur employee ka na ho
-            cur.execute("""
-                SELECT id
-                FROM users
-                WHERE email = %s
-                  AND id != %s
-                  AND (is_deleted = 0 OR is_deleted IS NULL)
-                LIMIT 1
-            """, (email, employee_id))
-            existing_email = cur.fetchone()
+            existing_email = db.users.find_one({
+                "email": email,
+                "_id": {"$ne": employee_obj_id},
+                "$or": [
+                    {"is_deleted": 0},
+                    {"is_deleted": False},
+                    {"is_deleted": {"$exists": False}},
+                    {"is_deleted": None}
+                ]
+            })
 
             if existing_email:
-                cur.close()
                 flash("This email is already used by another user.", "danger")
                 return redirect(url_for("admin.edit_employee", employee_id=employee_id))
 
+            update_data = {
+                "name": name,
+                "email": email,
+                "role": role
+            }
+
             # password diya hai to password bhi update karo
             if password:
-                hashed_password = generate_password_hash(password)
+                update_data["password"] = generate_password_hash(password)
 
-                cur.execute("""
-                    UPDATE users
-                    SET name = %s,
-                        email = %s,
-                        password = %s,
-                        role = %s
-                    WHERE id = %s
-                      AND company_id = %s
-                      AND role IN ('employee', 'qr_employee', 'sales')
-                      AND (is_deleted = 0 OR is_deleted IS NULL)
-                """, (name, email, hashed_password, role, employee_id, company_id))
-            else:
-                cur.execute("""
-                    UPDATE users
-                    SET name = %s,
-                        email = %s,
-                        role = %s
-                    WHERE id = %s
-                      AND company_id = %s
-                      AND role IN ('employee', 'qr_employee', 'sales')
-                      AND (is_deleted = 0 OR is_deleted IS NULL)
-                """, (name, email, role, employee_id, company_id))
+            result = db.users.update_one(
+                {
+                    "_id": employee_obj_id,
+                    "company_id": company_id,
+                    "role": {
+                        "$in": ["employee", "qr_employee", "sales"]
+                    },
+                    "$or": [
+                        {"is_deleted": 0},
+                        {"is_deleted": False},
+                        {"is_deleted": {"$exists": False}},
+                        {"is_deleted": None}
+                    ]
+                },
+                {
+                    "$set": update_data
+                }
+            )
 
-            mysql.connection.commit()
-
-            if cur.rowcount == 0:
-                cur.close()
+            if result.matched_count == 0:
                 flash("Employee not found or update not allowed.", "danger")
                 return redirect(url_for("admin.manage_employees"))
 
-            cur.close()
             flash("Employee updated successfully.", "success")
             return redirect(url_for("admin.manage_employees"))
 
         except Exception as e:
-            mysql.connection.rollback()
-            cur.close()
             flash(f"Error updating employee: {str(e)}", "danger")
             return redirect(url_for("admin.edit_employee", employee_id=employee_id))
 
     # GET request ke liye employee fetch karo
-    cur.execute("""
-        SELECT id, name, email, role
-        FROM users
-        WHERE id = %s
-          AND company_id = %s
-          AND role IN ('employee', 'qr_employee', 'sales')
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-        LIMIT 1
-    """, (employee_id, company_id))
-    row = cur.fetchone()
-    cur.close()
+    employee = db.users.find_one({
+        "_id": employee_obj_id,
+        "company_id": company_id,
+        "role": {
+            "$in": ["employee", "qr_employee", "sales"]
+        },
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
-    if not row:
+    if not employee:
         flash("Employee not found.", "danger")
         return redirect(url_for("admin.manage_employees"))
 
-    employee = {
-        "id": row[0],
-        "name": row[1] or "",
-        "email": row[2] or "",
-        "role": row[3] or ""
+    employee_data = {
+        "id": str(employee.get("_id")),
+        "name": employee.get("name", ""),
+        "email": employee.get("email", ""),
+        "role": employee.get("role", "")
     }
 
-    return render_template("edit_employee.html", employee=employee)
+    return render_template(
+        "edit_employee.html",
+        employee=employee_data
+    )
 
 
 
@@ -1375,7 +1429,7 @@ def coupon_generator():
                 # -----------------------------
                 # QR GENERATE
                 # -----------------------------
-                qr_data = f"https://192.168.1.13:5000/scan/{code}"
+                qr_data = request.host_url.rstrip("/") + f"/scan/{code}"
 
                 filename = f"{code}.png"
 
@@ -1478,81 +1532,107 @@ def company_admin_analytics():
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
-    cur = mysql.connection.cursor()
 
-    cur.execute("""
-        SELECT COUNT(*), COALESCE(SUM(points), 0)
-        FROM coupons
-        WHERE company_id = %s AND is_deleted = 0
-    """, (company_id,))
-    row = cur.fetchone()
-    total_generated = row[0] or 0
-    total_points_generated = row[1] or 0
+    base_query = {
+        "company_id": company_id,
+        "is_deleted": 0
+    }
 
-    cur.execute("""
-        SELECT COUNT(*), COALESCE(SUM(points), 0)
-        FROM coupons
-        WHERE company_id = %s AND is_deleted = 0 AND scanned_at IS NOT NULL
-    """, (company_id,))
-    row = cur.fetchone()
-    total_scanned = row[0] or 0
-    total_points_scanned = row[1] or 0
+    total_generated = db.coupons.count_documents(base_query)
 
-    cur.execute("""
-        SELECT COUNT(*), COALESCE(SUM(points), 0)
-        FROM coupons
-        WHERE company_id = %s AND is_deleted = 0 AND status = 'redeemed'
-    """, (company_id,))
-    row = cur.fetchone()
-    total_redeemed = row[0] or 0
-    total_points_redeemed = row[1] or 0
+    total_points_generated = sum(
+        int(c.get("points") or 0)
+        for c in db.coupons.find(base_query, {"points": 1})
+    )
 
-    cur.execute("""
-        SELECT COUNT(*), COALESCE(SUM(points), 0)
-        FROM coupons
-        WHERE company_id = %s
-          AND is_deleted = 0
-          AND scanned_at IS NOT NULL
-          AND status = 'scanned'
-    """, (company_id,))
-    row = cur.fetchone()
-    scanned_not_redeemed = row[0] or 0
-    points_scanned_not_redeemed = row[1] or 0
+    scanned_query = {
+        **base_query,
+        "scanned_at": {"$exists": True, "$ne": None}
+    }
 
-    cur.execute("""
-        SELECT COALESCE(u.name, 'Unknown'),
-               COUNT(c.id),
-               COALESCE(SUM(c.points), 0)
-        FROM coupons c
-        LEFT JOIN users u ON c.created_by = u.id
-        WHERE c.company_id = %s
-          AND c.is_deleted = 0
-        GROUP BY u.name
-        ORDER BY COUNT(c.id) DESC
-        LIMIT 15
-    """, (company_id,))
-    generated_by_user = cur.fetchall()
+    total_scanned = db.coupons.count_documents(scanned_query)
 
-    # FIXED: scanned by actual distributor/dealer name
-    cur.execute("""
-        SELECT 
-            COALESCE(d.name, 'Unknown') AS scanned_by,
-            COUNT(c.id) AS scanned_count,
-            COALESCE(SUM(c.points), 0) AS total_points
-        FROM coupons c
-        LEFT JOIN distributors d ON c.scanned_by = d.id
-        WHERE c.company_id = %s
-          AND c.is_deleted = 0
-          AND c.scanned_at IS NOT NULL
-          AND c.status IN ('scanned', 'redeemed')
-        GROUP BY c.scanned_by, d.name
-        ORDER BY scanned_count DESC
-    """, (company_id,))
-    scanned_by_user = cur.fetchall()
+    total_points_scanned = sum(
+        int(c.get("points") or 0)
+        for c in db.coupons.find(scanned_query, {"points": 1})
+    )
 
-    cur.close()
+    redeemed_query = {
+        **base_query,
+        "status": "redeemed"
+    }
+
+    total_redeemed = db.coupons.count_documents(redeemed_query)
+
+    total_points_redeemed = sum(
+        int(c.get("points") or 0)
+        for c in db.coupons.find(redeemed_query, {"points": 1})
+    )
+
+    scanned_not_redeemed_query = {
+        **base_query,
+        "scanned_at": {"$exists": True, "$ne": None},
+        "status": "scanned"
+    }
+
+    scanned_not_redeemed = db.coupons.count_documents(scanned_not_redeemed_query)
+
+    points_scanned_not_redeemed = sum(
+        int(c.get("points") or 0)
+        for c in db.coupons.find(scanned_not_redeemed_query, {"points": 1})
+    )
+
+    generated_by_user = []
+    pipeline_generated = [
+        {"$match": base_query},
+        {
+            "$group": {
+                "_id": "$created_by",
+                "count": {"$sum": 1},
+                "points": {"$sum": {"$toInt": "$points"}}
+            }
+        },
+        {"$sort": {"count": -1}},
+        {"$limit": 15}
+    ]
+
+    for r in db.coupons.aggregate(pipeline_generated):
+        generated_by_user.append((
+            str(r.get("_id") or "Unknown"),
+            r.get("count", 0),
+            r.get("points", 0)
+        ))
+
+    scanned_by_user = []
+    pipeline_scanned = [
+        {
+            "$match": {
+                **base_query,
+                "scanned_at": {"$exists": True, "$ne": None},
+                "status": {"$in": ["scanned", "redeemed"]}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$scanned_by",
+                "count": {"$sum": 1},
+                "points": {"$sum": {"$toInt": "$points"}}
+            }
+        },
+        {"$sort": {"count": -1}}
+    ]
+
+    for r in db.coupons.aggregate(pipeline_scanned):
+        dealer = db.distributors.find_one({"_id": oid(r.get("_id"))})
+        dealer_name = dealer.get("name", "Unknown") if dealer else "Unknown"
+
+        scanned_by_user.append((
+            dealer_name,
+            r.get("count", 0),
+            r.get("points", 0)
+        ))
 
     return render_template(
         "company_admin_analytics.html",
@@ -1575,33 +1655,38 @@ def company_admin_history():
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
-    cur = mysql.connection.cursor()
 
-    cur.execute("""
-        SELECT
-            id,
-            code,
-            product_name,
-            part_no,
-            pack_size,
-            points,
-            status,
-            DATE(created_at) AS created_date,
-            DATE(scanned_at) AS scanned_date,
-            DATE(redeemed_at) AS redeemed_date
-        FROM coupons
-        WHERE company_id = %s AND is_deleted = 0
-        ORDER BY id DESC
-        LIMIT 300
-    """, (company_id,))
+    rows = db.coupons.find({
+        "company_id": company_id,
+        "is_deleted": 0
+    }).sort("_id", -1).limit(300)
 
-    history_rows = cur.fetchall()
-    cur.close()
+    history_rows = []
 
-    return render_template("company_admin_history.html", history_rows=history_rows)
+    for c in rows:
+        created_at = c.get("created_at")
+        scanned_at = c.get("scanned_at")
+        redeemed_at = c.get("redeemed_at")
+
+        history_rows.append((
+            str(c.get("_id")),
+            c.get("code", ""),
+            c.get("product_name", ""),
+            c.get("part_no", ""),
+            c.get("pack_size", ""),
+            int(c.get("points") or 0),
+            c.get("status", ""),
+            created_at.date() if created_at else "",
+            scanned_at.date() if scanned_at else "",
+            redeemed_at.date() if redeemed_at else ""
+        ))
+
+    return render_template(
+        "company_admin_history.html",
+        history_rows=history_rows
+    )
 
 @admin_bp.route("/company-admin/dashboard")
 def company_admin_dashboard():
@@ -1613,144 +1698,105 @@ def company_admin_dashboard():
         flash("Unauthorized access.", "danger")
         return redirect(url_for("auth.login"))
 
-    
     expired_redirect = block_if_trial_company_expired()
     if expired_redirect:
-     return expired_redirect
+        return expired_redirect
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
+    company_id = session.get("company_id")
 
-    employee_count = 0
-    distributor_count = 0
-    retailer_count = 0
-    mechanic_count = 0
-    product_count = 0
-    catalogue_count = 0
-    total_generated = 0
-    total_scans = 0
-    redeemed_count = 0
-    pending_count = 0
+    active_filter = {
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }
 
-    try:
-        company_id = session.get("company_id")
+    employee_count = db.users.count_documents({
+        "company_id": company_id,
+        "role": {"$in": ["employee", "qr_employee", "redeem_employee", "sales"]},
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM users
-            WHERE company_id = %s
-              AND role IN ('employee', 'qr_employee', 'redeem_employee', 'sales')
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-        """, (company_id,))
-        row = cur.fetchone()
-        employee_count = row[0] if row else 0
+    distributor_count = db.distributors.count_documents(active_filter)
+    retailer_count = db.retailers.count_documents(active_filter)
+    mechanic_count = db.mechanics.count_documents(active_filter)
+    catalogue_count = db.catalogues.count_documents(active_filter)
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM distributors
-            WHERE company_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-        """, (company_id,))
-        row = cur.fetchone()
-        distributor_count = row[0] if row else 0
+    product_pipeline = [
+        {
+            "$match": {
+                "company_id": company_id,
+                "$or": [
+                    {"is_deleted": 0},
+                    {"is_deleted": False},
+                    {"is_deleted": {"$exists": False}},
+                    {"is_deleted": None}
+                ],
+                "part_no": {"$nin": [None, ""]},
+                "product_name": {"$nin": [None, ""]}
+            }
+        },
+        {
+            "$group": {
+                "_id": {
+                    "part_no": "$part_no",
+                    "product_name": "$product_name",
+                    "product_type": "$product_type",
+                    "pack_size": "$pack_size",
+                    "mrp": "$mrp",
+                    "dlp": "$dlp",
+                    "points": "$points",
+                    "qr_size": "$qr_size"
+                }
+            }
+        },
+        {"$count": "count"}
+    ]
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM retailers
-            WHERE company_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-        """, (company_id,))
-        row = cur.fetchone()
-        retailer_count = row[0] if row else 0
+    product_result = list(db.coupons.aggregate(product_pipeline))
+    product_count = product_result[0]["count"] if product_result else 0
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM mechanics
-            WHERE company_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-        """, (company_id,))
-        row = cur.fetchone()
-        mechanic_count = row[0] if row else 0
+    total_generated = db.coupons.count_documents(active_filter)
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM (
-                SELECT part_no, product_name, product_type, pack_size, mrp, dlp, points, qr_size
-                FROM coupons
-                WHERE company_id = %s
-                  AND (is_deleted = 0 OR is_deleted IS NULL)
-                  AND part_no IS NOT NULL
-                  AND product_name IS NOT NULL
-                  AND part_no <> ''
-                  AND product_name <> ''
-                GROUP BY part_no, product_name, product_type, pack_size, mrp, dlp, points, qr_size
-            ) x
-        """, (company_id,))
-        row = cur.fetchone()
-        product_count = row[0] if row else 0
+    total_scans = db.coupons.count_documents({
+        **active_filter,
+        "scanned_at": {"$exists": True, "$ne": None}
+    })
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM catalogues
-            WHERE company_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-        """, (company_id,))
-        row = cur.fetchone()
-        catalogue_count = row[0] if row else 0
+    redeemed_count = db.coupons.count_documents({
+        **active_filter,
+        "status": {
+            "$in": [
+                "redeemed",
+                "material_redeemed",
+                "credit_note_issued",
+                "set_redeemed",
+                "credit_note"
+            ]
+        }
+    })
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM coupons
-            WHERE company_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-        """, (company_id,))
-        row = cur.fetchone()
-        total_generated = row[0] if row else 0
-
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM coupons
-            WHERE company_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-              AND scanned_at IS NOT NULL
-        """, (company_id,))
-        row = cur.fetchone()
-        total_scans = row[0] if row else 0
-
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM coupons
-            WHERE company_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-              AND (
-                    is_redeemed = 1
-                    OR status IN ('redeemed', 'material_redeemed', 'credit_note_issued', 'set_redeemed', 'credit_note')
-              )
-        """, (company_id,))
-        row = cur.fetchone()
-        redeemed_count = row[0] if row else 0
-
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM coupons
-            WHERE company_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-              AND (
-                    status = 'scanned'
-                    OR (
-                        scanned_at IS NOT NULL
-                        AND (is_redeemed = 0 OR is_redeemed IS NULL)
-                    )
-              )
-        """, (company_id,))
-        row = cur.fetchone()
-        pending_count = row[0] if row else 0
-
-    except Exception as e:
-        flash(f"Dashboard error: {str(e)}", "danger")
-
-    finally:
-        cur.close()
+    pending_count = db.coupons.count_documents({
+        **active_filter,
+        "scanned_at": {"$exists": True, "$ne": None},
+        "$or": [
+            {"status": "scanned"},
+            {"status": "pending"},
+            {"is_redeemed": 0},
+            {"is_redeemed": False},
+            {"is_redeemed": {"$exists": False}},
+            {"is_redeemed": None}
+        ]
+    })
 
     return render_template(
         "company_admin_dashboard.html",
@@ -1920,42 +1966,7 @@ def add_distributor():
     return redirect(url_for("admin.company_admin_distributors_page"))
     
 
-@admin_bp.route("/company-admin/retailers")
-def company_admin_retailers_page():
-    if "user_id" not in session:
-        flash("Please login first.", "warning")
-        return redirect(url_for("auth.login"))
 
-   
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    company_id = session.get("company_id")
-
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        SELECT id, dealer_code, name, mobile, email, pan, gst, city, state, address
-        FROM retailers
-        WHERE company_id = %s AND (is_deleted = 0 OR is_deleted IS NULL)
-        ORDER BY id DESC
-    """, (company_id,))
-    rows = cur.fetchall()
-    cur.close()
-
-    retailers = []
-    for row in rows:
-        retailers.append({
-            "id": row[0],
-            "dealer_code": row[1],
-            "name": row[2],
-            "mobile": row[3],
-            "email": row[4],
-            "pan": row[5],
-            "gst": row[6],
-            "city": row[7],
-            "state": row[8],
-            "address": row[9]
-        })
-
-    return render_template("company_admin_retailers.html", retailers=retailers)
 
 @admin_bp.route("/company-admin/retailers/add", methods=["POST"])
 def add_retailer():
@@ -1963,35 +1974,37 @@ def add_retailer():
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-   
-
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
-    dealer_code = request.form.get("dealer_code")
-    name = request.form.get("name")
-    mobile = request.form.get("mobile")
-    email = request.form.get("email")
-    password = request.form.get("password")
-    pan = request.form.get("pan")
-    gst = request.form.get("gst")
-    city = request.form.get("city")
-    state = request.form.get("state")
-    address = request.form.get("address")
+    dealer_code = request.form.get("dealer_code", "").strip()
+    name = request.form.get("name", "").strip()
+    mobile = request.form.get("mobile", "").strip()
+    email = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "").strip()
+    pan = request.form.get("pan", "").strip().upper()
+    gst = request.form.get("gst", "").strip().upper()
+    city = request.form.get("city", "").strip()
+    state = request.form.get("state", "").strip()
+    address = request.form.get("address", "").strip()
 
     hashed_password = generate_password_hash(password) if password else None
 
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        INSERT INTO retailers
-        (dealer_code, name, mobile, email, password, pan, gst, city, state, address, company_id, is_deleted)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0)
-    """, (
-        dealer_code, name, mobile, email, hashed_password,
-        pan, gst, city, state, address, company_id
-    ))
-    mysql.connection.commit()
-    cur.close()
+    db.retailers.insert_one({
+        "dealer_code": dealer_code,
+        "name": name,
+        "mobile": mobile,
+        "email": email,
+        "password": hashed_password,
+        "pan": pan,
+        "gst": gst,
+        "city": city,
+        "state": state,
+        "address": address,
+        "company_id": company_id,
+        "is_deleted": 0,
+        "created_at": now()
+    })
 
     flash("Retailer added successfully.", "success")
     return redirect(url_for("admin.company_admin_retailers_page"))
@@ -2003,33 +2016,33 @@ def company_admin_mechanics_page():
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-   
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        SELECT id, dealer_code, name, mobile, email, pan, gst, city, state, address
-        FROM mechanics
-        WHERE company_id = %s AND (is_deleted = 0 OR is_deleted IS NULL)
-        ORDER BY id DESC
-    """, (company_id,))
-    rows = cur.fetchall()
-    cur.close()
+    rows = db.mechanics.find({
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }).sort("_id", -1)
 
     mechanics = []
+
     for row in rows:
         mechanics.append({
-            "id": row[0],
-            "dealer_code": row[1],
-            "name": row[2],
-            "mobile": row[3],
-            "email": row[4],
-            "pan": row[5],
-            "gst": row[6],
-            "city": row[7],
-            "state": row[8],
-            "address": row[9]
+            "id": str(row.get("_id")),
+            "dealer_code": row.get("dealer_code", ""),
+            "name": row.get("name", ""),
+            "mobile": row.get("mobile", ""),
+            "email": row.get("email", ""),
+            "pan": row.get("pan", ""),
+            "gst": row.get("gst", ""),
+            "city": row.get("city", ""),
+            "state": row.get("state", ""),
+            "address": row.get("address", "")
         })
 
     return render_template("company_admin_mechanics.html", mechanics=mechanics)
@@ -2040,35 +2053,37 @@ def add_mechanic():
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-   
-
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
-    dealer_code = request.form.get("dealer_code")
-    name = request.form.get("name")
-    mobile = request.form.get("mobile")
-    email = request.form.get("email")
-    password = request.form.get("password")
-    pan = request.form.get("pan")
-    gst = request.form.get("gst")
-    city = request.form.get("city")
-    state = request.form.get("state")
-    address = request.form.get("address")
+    dealer_code = request.form.get("dealer_code", "").strip()
+    name = request.form.get("name", "").strip()
+    mobile = request.form.get("mobile", "").strip()
+    email = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "").strip()
+    pan = request.form.get("pan", "").strip().upper()
+    gst = request.form.get("gst", "").strip().upper()
+    city = request.form.get("city", "").strip()
+    state = request.form.get("state", "").strip()
+    address = request.form.get("address", "").strip()
 
     hashed_password = generate_password_hash(password) if password else None
 
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        INSERT INTO mechanics
-        (dealer_code, name, mobile, email, password, pan, gst, city, state, address, company_id, is_deleted)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0)
-    """, (
-        dealer_code, name, mobile, email, hashed_password,
-        pan, gst, city, state, address, company_id
-    ))
-    mysql.connection.commit()
-    cur.close()
+    db.mechanics.insert_one({
+        "dealer_code": dealer_code,
+        "name": name,
+        "mobile": mobile,
+        "email": email,
+        "password": hashed_password,
+        "pan": pan,
+        "gst": gst,
+        "city": city,
+        "state": state,
+        "address": address,
+        "company_id": company_id,
+        "is_deleted": 0,
+        "created_at": now()
+    })
 
     flash("Mechanic added successfully.", "success")
     return redirect(url_for("admin.company_admin_mechanics_page"))
@@ -2079,84 +2094,106 @@ def company_admin_products_page():
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        SELECT
-            MIN(id) AS id,
-            part_no,
-            product_name,
-            product_type,
-            pack_size,
-            mrp,
-            dlp,
-            points,
-            qr_size,
-            COUNT(*) AS total_coupons
-        FROM coupons
-        WHERE company_id = %s
-          AND is_deleted = 0
-          AND part_no IS NOT NULL
-          AND product_name IS NOT NULL
-          AND part_no != ''
-          AND product_name != ''
-        GROUP BY part_no, product_name, product_type, pack_size, mrp, dlp, points, qr_size
-        ORDER BY MAX(id) DESC
-    """, (company_id,))
-    rows = cur.fetchall()
-    cur.close()
-
-    print("SESSION company_id =", company_id)
-    print("PRODUCT ROWS =", rows)
+    pipeline = [
+        {
+            "$match": {
+                "company_id": company_id,
+                "is_deleted": 0,
+                "part_no": {"$nin": [None, ""]},
+                "product_name": {"$nin": [None, ""]}
+            }
+        },
+        {
+            "$group": {
+                "_id": {
+                    "part_no": "$part_no",
+                    "product_name": "$product_name",
+                    "product_type": "$product_type",
+                    "pack_size": "$pack_size",
+                    "mrp": "$mrp",
+                    "dlp": "$dlp",
+                    "points": "$points",
+                    "qr_size": "$qr_size"
+                },
+                "id": {"$first": "$_id"},
+                "total_coupons": {"$sum": 1}
+            }
+        },
+        {"$sort": {"id": -1}}
+    ]
 
     products = []
-    for r in rows:
+
+    for r in db.coupons.aggregate(pipeline):
+        item = r["_id"]
         products.append({
-            "id": r[0],
-            "part_no": r[1],
-            "product_name": r[2],
-            "product_type": r[3],
-            "pack_size": r[4],
-            "mrp": r[5],
-            "dlp": r[6],
-            "points": r[7],
-            "qr_size": r[8],
-            "total_coupons": r[9]
+            "id": str(r["id"]),
+            "part_no": item.get("part_no", ""),
+            "product_name": item.get("product_name", ""),
+            "product_type": item.get("product_type", ""),
+            "pack_size": item.get("pack_size", ""),
+            "mrp": item.get("mrp", 0),
+            "dlp": item.get("dlp", 0),
+            "points": item.get("points", 0),
+            "qr_size": item.get("qr_size", ""),
+            "total_coupons": r.get("total_coupons", 0)
         })
 
     return render_template("company_admin_products.html", products=products)
+
+    
 @admin_bp.route("/company-admin/products/export")
 def export_products():
-    from flask import send_file
-    import pandas as pd
-    import io
-
     if "user_id" not in session:
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        SELECT part_no, product_name, product_type, pack_size, mrp, dlp, points
-        FROM products
-        WHERE company_id = %s
-        ORDER BY id DESC
-    """, (company_id,))
-    rows = cur.fetchall()
-    cur.close()
+    rows = db.coupons.find({
+        "company_id": company_id,
+        "is_deleted": 0,
+        "part_no": {"$nin": [None, ""]},
+        "product_name": {"$nin": [None, ""]}
+    })
 
-    df = pd.DataFrame(rows, columns=[
-        "part_no", "product_name", "product_type",
-        "pack_size", "mrp", "dlp", "points"
-    ])
+    data = []
+    seen = set()
+
+    for r in rows:
+        key = (
+            r.get("part_no", ""),
+            r.get("product_name", ""),
+            r.get("product_type", ""),
+            r.get("pack_size", ""),
+            r.get("mrp", 0),
+            r.get("dlp", 0),
+            r.get("points", 0)
+        )
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+
+        data.append({
+            "part_no": key[0],
+            "product_name": key[1],
+            "product_type": key[2],
+            "pack_size": key[3],
+            "mrp": key[4],
+            "dlp": key[5],
+            "points": key[6]
+        })
+
+    df = pd.DataFrame(data)
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False)
+        df.to_excel(writer, index=False, sheet_name="Products")
 
     output.seek(0)
 
@@ -2169,46 +2206,90 @@ def export_products():
 
 @admin_bp.route("/company-admin/products/import", methods=["POST"])
 def import_products():
-    
-
     if "user_id" not in session or session.get("user_role") != "admin":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
     file = request.files.get("excel_file")
 
-    if not file:
+    if not file or file.filename == "":
         flash("No file selected", "danger")
         return redirect(url_for("admin.company_admin_products_page"))
+
+    db = get_db()
+    company_id = session.get("company_id")
 
     try:
         df = pd.read_excel(file)
 
-        mysql = current_app.config["MYSQL_INSTANCE"]
-        company_id = session.get("company_id")
+        df.columns = [
+            str(col).strip().lower().replace(" ", "_").replace(".", "").replace("/", "_")
+            for col in df.columns
+        ]
 
-        cur = mysql.connection.cursor()
+        imported = 0
+        skipped = 0
 
         for _, row in df.iterrows():
-            cur.execute("""
-                INSERT INTO products 
-                (part_no, product_name, product_type, pack_size, mrp, dlp, points, company_id)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-            """, (
-                row.get("part_no"),
-                row.get("product_name"),
-                row.get("product_type"),
-                row.get("pack_size"),
-                row.get("mrp"),
-                row.get("dlp"),
-                row.get("points"),
-                company_id
-            ))
+            part_no = str(row.get("part_no", "")).strip()
+            product_name = str(row.get("product_name", "")).strip()
+            product_type = str(row.get("product_type", "Lubricant")).strip() or "Lubricant"
+            pack_size = str(row.get("pack_size", "")).strip()
 
-        mysql.connection.commit()
-        cur.close()
+            if not part_no or part_no.lower() == "nan":
+                skipped += 1
+                continue
 
-        flash("Products imported successfully", "success")
+            if not product_name or product_name.lower() == "nan":
+                skipped += 1
+                continue
+
+            try:
+                mrp = float(row.get("mrp", 0) or 0)
+            except:
+                mrp = 0
+
+            try:
+                dlp = float(row.get("dlp", 0) or 0)
+            except:
+                dlp = 0
+
+            try:
+                points = int(float(row.get("points", row.get("coupon", 0)) or 0))
+            except:
+                points = 0
+
+            qr_size = str(row.get("qr_size", "25x50")).strip() or "25x50"
+
+            code = generate_code(16)
+            while db.coupons.find_one({"code": code}):
+                code = generate_code(16)
+
+            qr_data = request.host_url.rstrip("/") + f"/scan/{code}"
+            filename = f"{code}.png"
+            qr_path = generate_qr(qr_data, filename)
+
+            db.coupons.insert_one({
+                "code": code,
+                "product_name": product_name,
+                "product_type": product_type,
+                "part_no": part_no,
+                "mrp": mrp,
+                "dlp": dlp,
+                "pack_size": pack_size,
+                "points": points,
+                "qr_size": qr_size,
+                "qr_image": qr_path.replace("\\", "/"),
+                "company_id": company_id,
+                "created_by": session.get("user_id"),
+                "status": "unused",
+                "is_deleted": 0,
+                "created_at": now()
+            })
+
+            imported += 1
+
+        flash(f"Products imported successfully. Imported: {imported}, Skipped: {skipped}", "success")
 
     except Exception as e:
         flash(f"Import failed: {str(e)}", "danger")
@@ -2217,85 +2298,121 @@ def import_products():
 
 @admin_bp.route("/company-admin/export-all-data")
 def export_all_data():
-    from flask import send_file
-    import pandas as pd
-    import io
-
     if "user_id" not in session or session.get("user_role") != "admin":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
-    cur = mysql.connection.cursor()
 
     output = io.BytesIO()
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        # Products
-        cur.execute("""
-            SELECT part_no, product_name, product_type, pack_size, mrp, dlp, points
-            FROM products
-            WHERE company_id = %s
-            ORDER BY id DESC
-        """, (company_id,))
-        rows = cur.fetchall()
-        pd.DataFrame(rows, columns=[
-            "part_no", "product_name", "product_type",
-            "pack_size", "mrp", "dlp", "points"
-        ]).to_excel(writer, index=False, sheet_name="Products")
 
-        # Distributors
-        cur.execute("""
-            SELECT dealer_code, name, mobile, email, pan, gst, city, state, address
-            FROM distributors
-            WHERE company_id = %s AND (is_deleted = 0 OR is_deleted IS NULL)
-            ORDER BY id DESC
-        """, (company_id,))
-        rows = cur.fetchall()
-        pd.DataFrame(rows, columns=[
-            "dealer_code", "name", "mobile", "email",
-            "pan", "gst", "city", "state", "address"
-        ]).to_excel(writer, index=False, sheet_name="Distributors")
+        products_data = []
+        seen = set()
 
-        # Retailers
-        cur.execute("""
-            SELECT dealer_code, name, mobile, email, pan, gst, city, state, address
-            FROM retailers
-            WHERE company_id = %s AND (is_deleted = 0 OR is_deleted IS NULL)
-            ORDER BY id DESC
-        """, (company_id,))
-        rows = cur.fetchall()
-        pd.DataFrame(rows, columns=[
-            "dealer_code", "name", "mobile", "email",
-            "pan", "gst", "city", "state", "address"
-        ]).to_excel(writer, index=False, sheet_name="Retailers")
+        for r in db.coupons.find({"company_id": company_id, "is_deleted": 0}):
+            key = (
+                r.get("part_no", ""),
+                r.get("product_name", ""),
+                r.get("product_type", ""),
+                r.get("pack_size", ""),
+                r.get("mrp", 0),
+                r.get("dlp", 0),
+                r.get("points", 0),
+                r.get("qr_size", "")
+            )
 
-        # Mechanics
-        cur.execute("""
-            SELECT dealer_code, name, mobile, email, pan, gst, city, state, address
-            FROM mechanics
-            WHERE company_id = %s AND (is_deleted = 0 OR is_deleted IS NULL)
-            ORDER BY id DESC
-        """, (company_id,))
-        rows = cur.fetchall()
-        pd.DataFrame(rows, columns=[
-            "dealer_code", "name", "mobile", "email",
-            "pan", "gst", "city", "state", "address"
-        ]).to_excel(writer, index=False, sheet_name="Mechanics")
+            if key in seen:
+                continue
 
-        # Coupons
-        cur.execute("""
-            SELECT *
-            FROM coupons
-            WHERE company_id = %s
-            ORDER BY id DESC
-        """, (company_id,))
-        rows = cur.fetchall()
-        columns = [desc[0] for desc in cur.description]
-        pd.DataFrame(rows, columns=columns).to_excel(writer, index=False, sheet_name="Coupons")
+            seen.add(key)
 
-    cur.close()
+            products_data.append({
+                "part_no": key[0],
+                "product_name": key[1],
+                "product_type": key[2],
+                "pack_size": key[3],
+                "mrp": key[4],
+                "dlp": key[5],
+                "points": key[6],
+                "qr_size": key[7]
+            })
+
+        pd.DataFrame(products_data).to_excel(writer, index=False, sheet_name="Products")
+
+        distributors_data = []
+        for r in db.distributors.find({"company_id": company_id}):
+            distributors_data.append({
+                "dealer_code": r.get("dealer_code", ""),
+                "name": r.get("name", ""),
+                "mobile": r.get("mobile", ""),
+                "email": r.get("email", ""),
+                "pan": r.get("pan", ""),
+                "gst": r.get("gst", ""),
+                "city": r.get("city", ""),
+                "state": r.get("state", ""),
+                "address": r.get("address", "")
+            })
+
+        pd.DataFrame(distributors_data).to_excel(writer, index=False, sheet_name="Distributors")
+
+        retailers_data = []
+        for r in db.retailers.find({"company_id": company_id}):
+            retailers_data.append({
+                "dealer_code": r.get("dealer_code", ""),
+                "name": r.get("name", ""),
+                "mobile": r.get("mobile", ""),
+                "email": r.get("email", ""),
+                "pan": r.get("pan", ""),
+                "gst": r.get("gst", ""),
+                "city": r.get("city", ""),
+                "state": r.get("state", ""),
+                "address": r.get("address", "")
+            })
+
+        pd.DataFrame(retailers_data).to_excel(writer, index=False, sheet_name="Retailers")
+
+        mechanics_data = []
+        for r in db.mechanics.find({"company_id": company_id}):
+            mechanics_data.append({
+                "dealer_code": r.get("dealer_code", ""),
+                "name": r.get("name", ""),
+                "mobile": r.get("mobile", ""),
+                "email": r.get("email", ""),
+                "pan": r.get("pan", ""),
+                "gst": r.get("gst", ""),
+                "city": r.get("city", ""),
+                "state": r.get("state", ""),
+                "address": r.get("address", "")
+            })
+
+        pd.DataFrame(mechanics_data).to_excel(writer, index=False, sheet_name="Mechanics")
+
+        coupons_data = []
+        for r in db.coupons.find({"company_id": company_id}):
+            coupons_data.append({
+                "id": str(r.get("_id")),
+                "code": r.get("code", ""),
+                "product_name": r.get("product_name", ""),
+                "product_type": r.get("product_type", ""),
+                "part_no": r.get("part_no", ""),
+                "mrp": r.get("mrp", 0),
+                "dlp": r.get("dlp", 0),
+                "pack_size": r.get("pack_size", ""),
+                "points": r.get("points", 0),
+                "qr_size": r.get("qr_size", ""),
+                "status": r.get("status", ""),
+                "dealer_id": r.get("dealer_id", ""),
+                "scanned_by": r.get("scanned_by", ""),
+                "created_at": str(r.get("created_at", "")),
+                "scanned_at": str(r.get("scanned_at", "")),
+                "redeemed_at": str(r.get("redeemed_at", ""))
+            })
+
+        pd.DataFrame(coupons_data).to_excel(writer, index=False, sheet_name="Coupons")
+
     output.seek(0)
 
     return send_file(
@@ -2307,32 +2424,64 @@ def export_all_data():
 
 @admin_bp.route("/company-admin/products/add", methods=["POST"])
 def add_product():
-    if "user_id" not in session:
+    if "user_id" not in session or session.get("user_role") != "admin":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
-    part_no = request.form.get("part_no")
-    product_name = request.form.get("product_name")
-    product_type = request.form.get("product_type")
-    pack_size = request.form.get("pack_size")
-    mrp = request.form.get("mrp")
-    dlp = request.form.get("dlp")
-    points = request.form.get("points")
+    part_no = request.form.get("part_no", "").strip()
+    product_name = request.form.get("product_name", "").strip()
+    product_type = request.form.get("product_type", "").strip()
+    pack_size = request.form.get("pack_size", "").strip()
 
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        INSERT INTO products 
-        (part_no, product_name, product_type, pack_size, mrp, dlp, points, company_id)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-    """, (part_no, product_name, product_type, pack_size, mrp, dlp, points, company_id))
+    try:
+        mrp = float(request.form.get("mrp", 0) or 0)
+    except:
+        mrp = 0
 
-    mysql.connection.commit()
-    cur.close()
+    try:
+        dlp = float(request.form.get("dlp", 0) or 0)
+    except:
+        dlp = 0
 
+    try:
+        points = int(request.form.get("points", 0) or 0)
+    except:
+        points = 0
+
+    if not part_no or not product_name:
+        flash("Part No and Product Name are required.", "danger")
+        return redirect(url_for("admin.company_admin_products_page"))
+
+    code = generate_code(16)
+    while db.coupons.find_one({"code": code}):
+        code = generate_code(16)
+
+    qr_data = request.host_url.rstrip("/") + f"/scan/{code}"
+    filename = f"{code}.png"
+    qr_path = generate_qr(qr_data, filename)
+
+    db.coupons.insert_one({
+        "code": code,
+        "product_name": product_name,
+        "product_type": product_type,
+        "part_no": part_no,
+        "mrp": mrp,
+        "dlp": dlp,
+        "pack_size": pack_size,
+        "points": points,
+        "qr_size": "25x50",
+        "qr_image": qr_path.replace("\\", "/"),
+        "company_id": company_id,
+        "created_by": session.get("user_id"),
+        "status": "unused",
+        "is_deleted": 0,
+        "created_at": now()
+    })
+
+    flash("Product added successfully.", "success")
     return redirect(url_for("admin.company_admin_products_page"))
 
 
@@ -2343,18 +2492,27 @@ def company_admin_banners_page():
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        SELECT id, title, image
-        FROM banners
-        WHERE company_id = %s
-        ORDER BY id DESC
-    """, (company_id,))
-    banners = cur.fetchall()
-    cur.close()
+    rows = db.banners.find({
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }).sort("_id", -1)
+
+    banners = []
+
+    for row in rows:
+        banners.append((
+            str(row.get("_id")),
+            row.get("title", ""),
+            row.get("image", "")
+        ))
 
     return render_template("company_admin_banners.html", banners=banners)
 
@@ -2365,7 +2523,7 @@ def add_banner():
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
     title = request.form.get("title", "").strip()
@@ -2385,53 +2543,71 @@ def add_banner():
     save_path = os.path.join(upload_folder, unique_filename)
     image.save(save_path)
 
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        INSERT INTO banners (title, image, company_id)
-        VALUES (%s, %s, %s)
-    """, (title, unique_filename, company_id))
-    mysql.connection.commit()
-    cur.close()
+    db.banners.insert_one({
+        "title": title,
+        "image": unique_filename,
+        "company_id": company_id,
+        "is_deleted": 0,
+        "is_active": 1,
+        "created_at": now()
+    })
 
     flash("Banner added successfully.", "success")
     return redirect(url_for("admin.company_admin_banners_page"))
 
 
-@admin_bp.route("/company-admin/banners/delete/<int:id>", methods=["POST"])
-def delete_banner(id):
+@admin_bp.route("/company-admin/banners/delete/<banner_id>", methods=["POST"])
+def delete_banner(banner_id):
+
     if "user_id" not in session or session.get("user_role") != "admin":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
-    cur = mysql.connection.cursor()
+    try:
+        banner_obj_id = ObjectId(banner_id)
+    except:
+        flash("Invalid banner ID.", "danger")
+        return redirect(url_for("admin.company_admin_banners_page"))
 
-    cur.execute("""
-        SELECT image
-        FROM banners
-        WHERE id = %s AND company_id = %s
-    """, (id, company_id))
-    row = cur.fetchone()
+    banner = db.banners.find_one({
+        "_id": banner_obj_id,
+        "company_id": company_id
+    })
 
-    if row:
-        image_filename = row[0]
-        image_path = os.path.join(current_app.root_path, "static", "uploads", image_filename)
+    if banner:
 
-        cur.execute("""
-            DELETE FROM banners
-            WHERE id = %s AND company_id = %s
-        """, (id, company_id))
-        mysql.connection.commit()
+        image_filename = banner.get("image", "")
 
+        image_path = os.path.join(
+            current_app.root_path,
+            "static",
+            "uploads",
+            image_filename
+        )
+
+        # Soft delete
+        db.banners.update_one(
+            {
+                "_id": banner_obj_id,
+                "company_id": company_id
+            },
+            {
+                "$set": {
+                    "is_deleted": 1,
+                    "deleted_at": now()
+                }
+            }
+        )
+
+        # optional physical delete
         if image_filename and os.path.exists(image_path):
             try:
                 os.remove(image_path)
             except Exception:
                 pass
-
-    cur.close()
 
     flash("Banner deleted successfully.", "success")
     return redirect(url_for("admin.company_admin_banners_page"))
@@ -2439,42 +2615,48 @@ def delete_banner(id):
 
 @admin_bp.route("/company-admin/catalogues")
 def company_admin_catalogues_page():
-    if "user_id" not in session:
+
+    if "user_id" not in session or session.get("user_role") != "admin":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        SELECT id, title, file_name, file_path, created_at
-        FROM catalogues
-        WHERE company_id = %s AND is_deleted = 0
-        ORDER BY id DESC
-    """, (company_id,))
-    rows = cur.fetchall()
-    cur.close()
+    rows = db.catalogues.find({
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }).sort("_id", -1)
 
     catalogues = []
+
     for row in rows:
         catalogues.append({
-            "id": row[0],
-            "title": row[1],
-            "file_name": row[2],
-            "file_path": row[3],
-            "created_at": row[4]
+            "id": str(row.get("_id")),
+            "title": row.get("title", ""),
+            "file_name": row.get("file_name", ""),
+            "file_path": row.get("file_path", ""),
+            "created_at": row.get("created_at")
         })
 
-    return render_template("company_admin_catalogues.html", catalogues=catalogues)
+    return render_template(
+        "company_admin_catalogues.html",
+        catalogues=catalogues
+    )
 
 @admin_bp.route("/company-admin/catalogues/add", methods=["POST"])
 def add_catalogue():
+
     if "user_id" not in session:
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
 
     title = request.form.get("title", "").strip()
@@ -2488,87 +2670,104 @@ def add_catalogue():
         flash("Only PDF files are allowed.", "danger")
         return redirect(url_for("admin.company_admin_catalogues_page"))
 
-    filename = secure_filename(pdf_file.filename)
-    upload_folder = os.path.join("static", "catalogues")
+    original_filename = secure_filename(pdf_file.filename)
 
-    if not os.path.exists(upload_folder):
-        os.makedirs(upload_folder)
+    # unique filename
+    unique_filename = f"{uuid.uuid4().hex}_{original_filename}"
 
-    file_path = os.path.join(upload_folder, filename)
+    upload_folder = os.path.join(
+        current_app.root_path,
+        "static",
+        "catalogues"
+    )
+
+    os.makedirs(upload_folder, exist_ok=True)
+
+    file_path = os.path.join(upload_folder, unique_filename)
+
     pdf_file.save(file_path)
 
-    db_path = f"catalogues/{filename}"
+    db_path = f"catalogues/{unique_filename}"
 
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        INSERT INTO catalogues (title, file_name, file_path, company_id, is_deleted)
-        VALUES (%s, %s, %s, %s, 0)
-    """, (title, filename, db_path, company_id))
-    mysql.connection.commit()
-    cur.close()
+    db.catalogues.insert_one({
+        "title": title,
+        "file_name": unique_filename,
+        "file_path": db_path,
+        "company_id": company_id,
+        "is_deleted": 0,
+        "created_by": session.get("user_id"),
+        "created_at": now()
+    })
 
     flash("Catalogue uploaded successfully.", "success")
     return redirect(url_for("admin.company_admin_catalogues_page"))
 
-@admin_bp.route("/company-admin/catalogues/delete/<int:id>", methods=["POST"])
-def delete_catalogue(id):
+@admin_bp.route("/company-admin/catalogues/delete/<catalogue_id>", methods=["POST"])
+def delete_catalogue(catalogue_id):
+
     if "user_id" not in session:
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
 
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        UPDATE catalogues
-        SET is_deleted = 1
-        WHERE id = %s
-    """, (id,))
-    mysql.connection.commit()
-    cur.close()
+    try:
+        catalogue_obj_id = ObjectId(catalogue_id)
+    except:
+        flash("Invalid catalogue ID.", "danger")
+        return redirect(url_for("admin.company_admin_catalogues_page"))
+
+    db.catalogues.update_one(
+        {"_id": catalogue_obj_id},
+        {
+            "$set": {
+                "is_deleted": 1,
+                "deleted_at": now()
+            }
+        }
+    )
 
     flash("Catalogue deleted successfully.", "success")
     return redirect(url_for("admin.company_admin_catalogues_page"))
 
+
 @admin_bp.route("/salesman/dashboard")
 def salesman_dashboard():
+
     if "user_id" not in session or session.get("user_role") != "sales":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
     salesman_id = session["user_id"]
 
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM distributors
-        WHERE salesman_id = %s AND (is_deleted = 0 OR is_deleted IS NULL)
-    """, (salesman_id,))
-    total_dealers = cur.fetchone()[0]
+    active_filter = {
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }
 
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM dealer_orders
-        WHERE salesman_id = %s
-    """, (salesman_id,))
-    total_orders = cur.fetchone()[0]
+    total_dealers = db.distributors.count_documents({
+        "salesman_id": salesman_id,
+        **active_filter
+    })
 
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM dealer_orders
-        WHERE salesman_id = %s AND order_status = 'pending'
-    """, (salesman_id,))
-    pending_orders = cur.fetchone()[0]
+    total_orders = db.dealer_orders.count_documents({
+        "salesman_id": salesman_id
+    })
 
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM dealer_orders
-        WHERE salesman_id = %s AND order_status = 'completed'
-    """, (salesman_id,))
-    completed_orders = cur.fetchone()[0]
+    pending_orders = db.dealer_orders.count_documents({
+        "salesman_id": salesman_id,
+        "order_status": "pending"
+    })
 
-    cur.close()
+    completed_orders = db.dealer_orders.count_documents({
+        "salesman_id": salesman_id,
+        "order_status": "completed"
+    })
 
     return render_template(
         "salesman_dashboard.html",
@@ -2578,100 +2777,150 @@ def salesman_dashboard():
         completed_orders=completed_orders
     )
 
+
 @admin_bp.route("/salesman/dealers")
 def salesman_dealers():
+
     if "user_id" not in session or session.get("user_role") != "sales":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
     salesman_id = session["user_id"]
 
-    cur.execute("""
-        SELECT id, dealer_code, name, mobile, email, city, state, address
-        FROM distributors
-        WHERE salesman_id = %s
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-        ORDER BY id DESC
-    """, (salesman_id,))
-    dealers = cur.fetchall()
-    cur.close()
+    rows = db.distributors.find({
+        "salesman_id": salesman_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }).sort("_id", -1)
 
-    return render_template("salesman_dealers.html", dealers=dealers)
+    dealers = []
+
+    for row in rows:
+        dealers.append((
+            str(row.get("_id")),
+            row.get("dealer_code", ""),
+            row.get("name", ""),
+            row.get("mobile", ""),
+            row.get("email", ""),
+            row.get("city", ""),
+            row.get("state", ""),
+            row.get("address", "")
+        ))
+
+    return render_template(
+        "salesman_dealers.html",
+        dealers=dealers
+    )
 
 @admin_bp.route("/salesman/dealers/add", methods=["GET", "POST"])
 def salesman_add_dealer():
+
     if "user_id" not in session or session.get("user_role") != "sales":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    if request.method == "POST":
-        mysql = current_app.config["MYSQL_INSTANCE"]
-        cur = mysql.connection.cursor()
+    db = get_db()
 
-        dealer_code = request.form.get("dealer_code")
-        name = request.form.get("name")
-        mobile = request.form.get("mobile")
-        email = request.form.get("email")
-        password = request.form.get("password")
-        pan = request.form.get("pan")
-        gst = request.form.get("gst")
-        city = request.form.get("city")
-        state = request.form.get("state")
-        address = request.form.get("address")
+    if request.method == "POST":
+
+        dealer_code = request.form.get("dealer_code", "").strip()
+        name = request.form.get("name", "").strip()
+        mobile = request.form.get("mobile", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "").strip()
+        pan = request.form.get("pan", "").strip().upper()
+        gst = request.form.get("gst", "").strip().upper()
+        city = request.form.get("city", "").strip()
+        state = request.form.get("state", "").strip()
+        address = request.form.get("address", "").strip()
+
+        if not dealer_code or not name:
+            flash("Dealer code and name are required.", "danger")
+            return redirect(url_for("admin.salesman_add_dealer"))
+
+        existing = db.distributors.find_one({
+            "dealer_code": dealer_code,
+            "company_id": session.get("company_id"),
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
+
+        if existing:
+            flash("Dealer code already exists.", "danger")
+            return redirect(url_for("admin.salesman_add_dealer"))
 
         hashed_password = generate_password_hash(password) if password else None
 
-        cur.execute("""
-            INSERT INTO distributors
-            (dealer_code, name, mobile, email, password, pan, gst, city, state, address, company_id, salesman_id, is_deleted)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0)
-        """, (
-            dealer_code, name, mobile, email, hashed_password, pan, gst,
-            city, state, address, session["company_id"], session["user_id"]
-        ))
-        mysql.connection.commit()
-        cur.close()
+        db.distributors.insert_one({
+            "dealer_code": dealer_code,
+            "name": name,
+            "mobile": mobile,
+            "email": email,
+            "password": hashed_password,
+            "pan": pan,
+            "gst": gst,
+            "city": city,
+            "state": state,
+            "address": address,
+            "company_id": session.get("company_id"),
+            "salesman_id": session.get("user_id"),
+            "is_deleted": 0,
+            "created_at": now()
+        })
 
         flash("Dealer created successfully.", "success")
         return redirect(url_for("admin.salesman_dealers"))
 
     return render_template("salesman_add_dealer.html")
 
+
 @admin_bp.route("/salesman/orders")
 def salesman_orders():
+
     if "user_id" not in session or session.get("user_role") != "sales":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
+    salesman_id = session.get("user_id")
 
-    cur.execute("""
-        SELECT
-            o.id,
-            o.order_no,
-            d.name AS dealer_name,
-            o.part_no,
-            o.part_name,
-            o.order_status,
-            o.total_amount,
-            o.created_at
-        FROM dealer_orders o
-        JOIN distributors d ON o.dealer_id = d.id
-        WHERE o.salesman_id = %s
-        ORDER BY o.id DESC
-    """, (session["user_id"],))
+    rows = db.dealer_orders.find({
+        "salesman_id": salesman_id
+    }).sort("_id", -1)
 
-    orders = cur.fetchall()
-    cur.close()
+    orders = []
+
+    for order in rows:
+        dealer_name = "N/A"
+
+        dealer_id = order.get("dealer_id")
+        if dealer_id:
+            dealer = db.distributors.find_one({"_id": oid(dealer_id)})
+            if dealer:
+                dealer_name = dealer.get("name", "N/A")
+
+        orders.append((
+            str(order.get("_id")),
+            order.get("order_no", ""),
+            dealer_name,
+            order.get("part_no", ""),
+            order.get("part_name", ""),
+            order.get("order_status", ""),
+            order.get("total_amount", 0),
+            order.get("created_at", "")
+        ))
 
     return render_template("salesman_orders.html", orders=orders)
 
-
-import random
-import string
 
 def generate_order_no():
     return "ORD-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
@@ -2679,82 +2928,114 @@ def generate_order_no():
 
 @admin_bp.route("/salesman/orders/create", methods=["GET", "POST"])
 def salesman_create_order():
+
     if "user_id" not in session or session.get("user_role") != "sales":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
+    salesman_id = session.get("user_id")
+    company_id = session.get("company_id")
 
     if request.method == "POST":
-        dealer_id = request.form.get("dealer_id")
+        dealer_id = request.form.get("dealer_id", "").strip()
         product_part_no = request.form.get("product_part_no", "").strip()
         product_name = request.form.get("product_name", "").strip()
-        qty = int(request.form.get("qty", 1) or 1)
-        rate = float(request.form.get("rate", 0) or 0)
-        amount = float(request.form.get("amount", 0) or 0)
+
+        try:
+            qty = int(request.form.get("qty", 1) or 1)
+        except:
+            qty = 1
+
+        try:
+            rate = float(request.form.get("rate", 0) or 0)
+        except:
+            rate = 0
+
+        try:
+            amount = float(request.form.get("amount", 0) or 0)
+        except:
+            amount = qty * rate
+
         remarks = request.form.get("remarks", "").strip()
 
         if not dealer_id:
-            cur.close()
             flash("Dealer is required.", "danger")
             return redirect(url_for("admin.salesman_create_order"))
 
         if not product_part_no:
-            cur.close()
             flash("Part number is required.", "danger")
             return redirect(url_for("admin.salesman_create_order"))
 
         if not product_name:
-            cur.close()
             flash("Part name is required.", "danger")
+            return redirect(url_for("admin.salesman_create_order"))
+
+        dealer = db.distributors.find_one({
+            "_id": oid(dealer_id),
+            "salesman_id": salesman_id,
+            "company_id": company_id,
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
+
+        if not dealer:
+            flash("Dealer not found or not assigned to you.", "danger")
             return redirect(url_for("admin.salesman_create_order"))
 
         order_no = generate_order_no()
 
-        cur.execute("""
-            INSERT INTO dealer_orders
-            (dealer_id, salesman_id, order_no, part_no, part_name, order_status, total_amount, remarks)
-            VALUES (%s, %s, %s, %s, %s, 'pending', %s, %s)
-        """, (
-            dealer_id,
-            session["user_id"],
-            order_no,
-            product_part_no,
-            product_name,
-            amount,
-            remarks
-        ))
-        order_id = cur.lastrowid
+        order_result = db.dealer_orders.insert_one({
+            "dealer_id": dealer_id,
+            "salesman_id": salesman_id,
+            "company_id": company_id,
+            "order_no": order_no,
+            "part_no": product_part_no,
+            "part_name": product_name,
+            "order_status": "pending",
+            "total_amount": amount,
+            "remarks": remarks,
+            "created_at": now()
+        })
 
-        cur.execute("""
-            INSERT INTO dealer_order_items
-            (order_id, product_part_no, product_name, qty, rate, amount)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (
-            order_id,
-            product_part_no,
-            product_name,
-            qty,
-            rate,
-            amount
-        ))
-
-        mysql.connection.commit()
-        cur.close()
+        db.dealer_order_items.insert_one({
+            "order_id": str(order_result.inserted_id),
+            "dealer_id": dealer_id,
+            "salesman_id": salesman_id,
+            "company_id": company_id,
+            "product_part_no": product_part_no,
+            "product_name": product_name,
+            "qty": qty,
+            "rate": rate,
+            "amount": amount,
+            "created_at": now()
+        })
 
         flash("Order created successfully.", "success")
         return redirect(url_for("admin.salesman_orders"))
 
-    cur.execute("""
-        SELECT id, name
-        FROM distributors
-        WHERE salesman_id = %s
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-        ORDER BY name ASC
-    """, (session["user_id"],))
-    dealers = cur.fetchall()
-    cur.close()
+    dealer_rows = db.distributors.find({
+        "salesman_id": salesman_id,
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }).sort("name", 1)
+
+    dealers = []
+
+    for d in dealer_rows:
+        dealers.append((
+            str(d.get("_id")),
+            d.get("name", "")
+        ))
 
     return render_template("salesman_create_order.html", dealers=dealers)
 
@@ -2763,88 +3044,63 @@ def salesman_create_order():
 
 
 
-def column_exists(cursor, table_name, column_name):
-    cursor.execute("""
-        SELECT COUNT(*)
-        FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = %s
-          AND COLUMN_NAME = %s
-    """, (table_name, column_name))
-    return cursor.fetchone()[0] > 0
-
-
-def first_existing_column(cursor, table_name, candidates):
-    for col in candidates:
-        if column_exists(cursor, table_name, col):
-            return col
-    return None
-
-
-
-
-
-
-@admin_bp.route("/redeem-coupon/<int:coupon_id>", methods=["POST"])
+@admin_bp.route("/redeem-coupon/<coupon_id>", methods=["POST"])
 def redeem_coupon(coupon_id):
+
     if "user_id" not in session:
         flash("Login first", "danger")
         return redirect(url_for("auth.login"))
 
-    manual_reason = request.form.get("manual_reason", "").strip()
+    db = get_db()
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    manual_reason = request.form.get("manual_reason", "").strip()
+    company_id = session.get("company_id")
 
     try:
-        company_id = session.get("company_id")
 
-        # Coupon details lo
-        cur.execute("""
-            SELECT id, code, points
-            FROM coupons
-            WHERE id = %s AND company_id = %s
-        """, (coupon_id, company_id))
-        coupon = cur.fetchone()
+        coupon = db.coupons.find_one({
+            "_id": oid(coupon_id),
+            "company_id": company_id
+        })
 
         if not coupon:
             flash("Invalid coupon", "danger")
             return redirect(url_for("admin.pending_redemptions"))
 
-        # Coupon redeem mark karo
-        cur.execute("""
-            UPDATE coupons
-            SET is_redeemed = 1
-            WHERE id = %s
-        """, (coupon_id,))
+        db.coupons.update_one(
+            {"_id": oid(coupon_id)},
+            {
+                "$set": {
+                    "is_redeemed": 1,
+                    "status": "redeemed",
+                    "redeemed_at": now(),
+                    "redeemed_by": session.get("user_id")
+                }
+            }
+        )
 
-        # 🔥 IMPORTANT: dealer_redemptions me entry insert karo
-        cur.execute("""
-            INSERT INTO dealer_redemptions
-            (dealer_id, redemption_type, part_no, product_name, coupons_count, redeemed_points, remarks, redeemed_by, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
-        """, (
-            session.get("user_id"),      # dealer_id (ya jis user ne redeem kiya)
-            "manual",
-            None,
-            None,
-            1,
-            coupon[2] if coupon[2] else 0,
-            manual_reason,
-            session.get("user_id")
-        ))
+        db.dealer_redemptions.insert_one({
+            "dealer_id": coupon.get("scanned_by") or coupon.get("dealer_id"),
+            "coupon_id": coupon_id,
+            "coupon_code": coupon.get("code"),
+            "redemption_type": "manual",
+            "part_no": coupon.get("part_no"),
+            "product_name": coupon.get("product_name"),
+            "coupons_count": 1,
+            "redeemed_points": int(coupon.get("points") or 0),
+            "remarks": manual_reason,
+            "redeemed_by": session.get("user_id"),
+            "company_id": company_id,
+            "created_at": now()
+        })
 
-        mysql.connection.commit()
         flash("Redeemed successfully", "success")
 
     except Exception as e:
-        mysql.connection.rollback()
         flash(str(e), "danger")
 
-    finally:
-        cur.close()
-
     return redirect(url_for("admin.pending_redemptions"))
+
 @admin_bp.route("/employee/pending-redemptions")
 def pending_redemptions():
     if "user_id" not in session:
@@ -2855,44 +3111,63 @@ def pending_redemptions():
         flash("Unauthorized access.", "danger")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
     company_id = session.get("company_id")
 
-    try:
-        cur.execute("""
-            SELECT
-                c.id,
-                c.code,
-                c.product_name,
-                c.part_no,
-                c.points,
-                c.scanned_at,
-                d.name AS dealer_name
-            FROM coupons c
-            LEFT JOIN distributors d ON c.scanned_by = d.id
-            WHERE c.company_id = %s
-              AND (c.is_deleted = 0 OR c.is_deleted IS NULL)
-              AND c.scanned_at IS NOT NULL
-              AND (c.is_redeemed = 0 OR c.is_redeemed IS NULL)
-              AND (
-                    c.status IS NULL
-                    OR c.status = ''
-                    OR c.status = 'scanned'
-                    OR c.status = 'pending'
-                  )
-            ORDER BY c.id DESC
-        """, (company_id,))
-        coupons = cur.fetchall()
+    rows = db.coupons.find({
+        "company_id": company_id,
+        "scanned_at": {"$exists": True, "$ne": None},
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ],
+        "$and": [
+            {
+                "$or": [
+                    {"is_redeemed": 0},
+                    {"is_redeemed": False},
+                    {"is_redeemed": {"$exists": False}},
+                    {"is_redeemed": None}
+                ]
+            },
+            {
+                "$or": [
+                    {"status": None},
+                    {"status": ""},
+                    {"status": "scanned"},
+                    {"status": "pending"}
+                ]
+            }
+        ]
+    }).sort("_id", -1)
 
-    except Exception as e:
-        coupons = []
-        flash(f"Pending redemptions error: {str(e)}", "danger")
+    coupons = []
 
-    finally:
-        cur.close()
+    for c in rows:
+        dealer_name = "Unknown"
 
-    return render_template("pending_redemptions.html", coupons=coupons)
+        dealer_id = c.get("scanned_by") or c.get("dealer_id")
+        if dealer_id:
+            dealer = db.distributors.find_one({"_id": oid(dealer_id)})
+            if dealer:
+                dealer_name = dealer.get("name", "Unknown")
+
+        coupons.append((
+            str(c.get("_id")),
+            c.get("code", ""),
+            c.get("product_name", ""),
+            c.get("part_no", ""),
+            int(c.get("points") or 0),
+            c.get("scanned_at"),
+            dealer_name
+        ))
+
+    return render_template(
+        "pending_redemptions.html",
+        coupons=coupons
+    )
 
 @admin_bp.route("/redeem-by-invoice", methods=["POST"])
 def redeem_by_invoice():
@@ -2901,296 +3176,362 @@ def redeem_by_invoice():
         flash("Login first", "danger")
         return redirect(url_for("auth.login"))
 
-    invoice_no = request.form.get("invoice_no")
-    dealer_id = request.form.get("dealer_id")
+    db = get_db()
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    invoice_no = request.form.get("invoice_no", "").strip()
+    dealer_id = request.form.get("dealer_id", "").strip()
+    company_id = session.get("company_id")
+
+    if not invoice_no:
+        flash("Invoice number is required.", "danger")
+        return redirect(url_for("admin.pending_redemptions"))
 
     try:
-        # total coupons count
-        cur.execute("""
-            SELECT COUNT(*), SUM(points)
-            FROM coupons
-            WHERE invoice_no = %s AND is_redeemed = 0
-        """, (invoice_no,))
-        data = cur.fetchone()
+        coupons = list(db.coupons.find({
+            "invoice_no": invoice_no,
+            "company_id": company_id,
+            "$or": [
+                {"is_redeemed": 0},
+                {"is_redeemed": False},
+                {"is_redeemed": {"$exists": False}},
+                {"is_redeemed": None}
+            ]
+        }))
 
-        if not data or data[0] == 0:
+        if not coupons:
             flash("No coupons found for invoice", "warning")
             return redirect(url_for("admin.pending_redemptions"))
 
-        count = data[0]
-        total_points = data[1] if data[1] else 0
+        count = len(coupons)
+        total_points = sum(int(c.get("points") or 0) for c in coupons)
 
-        # coupons mark redeemed
-        cur.execute("""
-            UPDATE coupons
-            SET is_redeemed = 1
-            WHERE invoice_no = %s
-        """, (invoice_no,))
+        db.coupons.update_many(
+            {
+                "invoice_no": invoice_no,
+                "company_id": company_id
+            },
+            {
+                "$set": {
+                    "is_redeemed": 1,
+                    "status": "redeemed",
+                    "redeemed_at": now(),
+                    "redeemed_by": session.get("user_id")
+                }
+            }
+        )
 
-        # entry in redemption table
-        cur.execute("""
-            INSERT INTO dealer_redemptions
-            (dealer_id, invoice_no, redemption_type, coupons_count, redeemed_points, redeemed_by, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """, (
-            dealer_id,
-            invoice_no,
-            "invoice",
-            count,
-            total_points,
-            session["user_id"]
-        ))
+        db.dealer_redemptions.insert_one({
+            "dealer_id": dealer_id,
+            "invoice_no": invoice_no,
+            "redemption_type": "invoice",
+            "coupons_count": count,
+            "redeemed_points": total_points,
+            "redeemed_by": session.get("user_id"),
+            "company_id": company_id,
+            "created_at": now()
+        })
 
-        mysql.connection.commit()
         flash("Invoice redeemed successfully", "success")
 
     except Exception as e:
-        mysql.connection.rollback()
         flash(str(e), "danger")
-
-    finally:
-        cur.close()
 
     return redirect(url_for("admin.pending_redemptions"))
 
 @admin_bp.route("/employee/dealer-wallets")
 def dealer_wallets():
+
     if "user_id" not in session or session.get("user_role") != "employee":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
+    company_id = session.get("company_id")
 
-    cur.execute("""
-        SELECT
-            d.id,
-            d.name,
-            d.mobile,
-            COALESCE(SUM(CASE
-                WHEN c.status IN ('scanned', 'redeemed') THEN c.points
-                ELSE 0
-            END), 0) AS total_points,
-            MAX(c.scanned_at) AS updated_at
-        FROM distributors d
-        LEFT JOIN coupons c ON c.scanned_by = d.id
-        WHERE d.company_id = %s
-          AND (d.is_deleted = 0 OR d.is_deleted IS NULL)
-        GROUP BY d.id, d.name, d.mobile
-        ORDER BY d.id DESC
-    """, (session.get("company_id"),))
+    dealers = db.distributors.find({
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }).sort("_id", -1)
 
-    wallets = cur.fetchall()
-    cur.close()
+    wallets = []
+
+    for dealer in dealers:
+        dealer_id = str(dealer.get("_id"))
+
+        coupons = list(db.coupons.find({
+            "$or": [
+                {"scanned_by": dealer_id},
+                {"dealer_id": dealer_id}
+            ],
+            "status": {"$in": ["scanned", "redeemed"]}
+        }))
+
+        total_points = sum(int(c.get("points") or 0) for c in coupons)
+
+        updated_at = None
+        scanned_dates = [c.get("scanned_at") for c in coupons if c.get("scanned_at")]
+        if scanned_dates:
+            updated_at = max(scanned_dates)
+
+        wallets.append((
+            dealer_id,
+            dealer.get("name", ""),
+            dealer.get("mobile", ""),
+            total_points,
+            updated_at
+        ))
 
     return render_template("dealer_wallets.html", wallets=wallets)
 
 @admin_bp.route("/employee/wallet-transactions")
 def wallet_transactions():
+
     if "user_id" not in session or session.get("user_role") != "employee":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
-    cur = mysql.connection.cursor()
 
-    cur.execute("""
-        SELECT *
-        FROM (
-            SELECT
-                wt.id AS sort_id,
-                d.name AS dealer_name,
-                wt.coupon_id,
-                wt.points,
-                wt.transaction_type,
-                wt.remarks,
-                wt.created_at
-            FROM wallet_transactions wt
-            JOIN distributors d ON wt.dealer_id = d.id
-            WHERE d.company_id = %s
+    transactions = []
 
-            UNION ALL
+    # Manual wallet transactions
+    wallet_rows = db.wallet_transactions.find({
+        "company_id": company_id
+    })
 
-            SELECT
-                c.id AS sort_id,
-                d.name AS dealer_name,
-                c.id AS coupon_id,
-                c.points,
-                'scan' AS transaction_type,
-                CONCAT('Coupon scanned: ', c.code) AS remarks,
-                c.scanned_at AS created_at
-            FROM coupons c
-            JOIN distributors d ON c.scanned_by = d.id
-            WHERE c.company_id = %s
-              AND c.scanned_at IS NOT NULL
-        ) x
-        ORDER BY created_at DESC
-    """, (company_id, company_id))
+    for wt in wallet_rows:
+        dealer_name = "Unknown"
+        dealer_id = wt.get("dealer_id")
 
-    transactions = cur.fetchall()
-    cur.close()
+        if dealer_id:
+            dealer = db.distributors.find_one({"_id": oid(dealer_id)})
+            if dealer:
+                dealer_name = dealer.get("name", "Unknown")
 
-    return render_template("wallet_transactions.html", transactions=transactions)
+        transactions.append((
+            str(wt.get("_id")),
+            dealer_name,
+            wt.get("coupon_id", ""),
+            int(wt.get("points") or 0),
+            wt.get("transaction_type", ""),
+            wt.get("remarks", ""),
+            wt.get("created_at")
+        ))
+
+    # Scan transactions from coupons
+    coupon_rows = db.coupons.find({
+        "company_id": company_id,
+        "scanned_at": {"$exists": True, "$ne": None}
+    })
+
+    for c in coupon_rows:
+        dealer_name = "Unknown"
+        dealer_id = c.get("scanned_by") or c.get("dealer_id")
+
+        if dealer_id:
+            dealer = db.distributors.find_one({"_id": oid(dealer_id)})
+            if dealer:
+                dealer_name = dealer.get("name", "Unknown")
+
+        transactions.append((
+            str(c.get("_id")),
+            dealer_name,
+            str(c.get("_id")),
+            int(c.get("points") or 0),
+            "scan",
+            f"Coupon scanned: {c.get('code', '')}",
+            c.get("scanned_at")
+        ))
+
+    transactions.sort(
+        key=lambda x: x[6] or datetime.min,
+        reverse=True
+    )
+
+    return render_template(
+        "wallet_transactions.html",
+        transactions=transactions
+    )
+
 
 @admin_bp.route("/scan/<code>")
 def scan_coupon(code):
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
+    code = code.strip().upper()
 
-    # find coupon
-    cur.execute("""
-        SELECT id, points, status
-        FROM coupons
-        WHERE code = %s
-        LIMIT 1
-    """, (code,))
-    coupon = cur.fetchone()
+    coupon = db.coupons.find_one({
+        "code": code,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
     if not coupon:
-        cur.close()
         return render_template("scan_result.html", status="invalid")
 
-    coupon_id, points, status = coupon
+    status = (coupon.get("status") or "").strip().lower()
 
-    # already used
     if status == "redeemed":
-        cur.close()
-        return render_template("scan_result.html", status="already")
+        return render_template(
+            "scan_result.html",
+            status="already",
+            points=int(coupon.get("points") or 0)
+        )
 
-    # mark scanned
-    cur.execute("""
-        UPDATE coupons
-        SET status = 'redeemed',
-            scanned_at = NOW()
-        WHERE id = %s
-    """, (coupon_id,))
+    db.coupons.update_one(
+        {"_id": coupon["_id"]},
+        {
+            "$set": {
+                "status": "redeemed",
+                "is_redeemed": 1,
+                "scanned_at": coupon.get("scanned_at") or now(),
+                "redeemed_at": now()
+            }
+        }
+    )
 
-    mysql.connection.commit()
-    cur.close()
-
-    return render_template("scan_result.html", status="success", points=points)
+    return render_template(
+        "scan_result.html",
+        status="success",
+        points=int(coupon.get("points") or 0)
+    )
 
 from flask import jsonify
+from pymongo import DESCENDING
+
 
 @admin_bp.route("/api/scan/<code>")
 def api_scan_coupon(code):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
 
-    cur.execute("""
-        SELECT id, points, status
-        FROM coupons
-        WHERE code = %s
-        LIMIT 1
-    """, (code,))
-    coupon = cur.fetchone()
+    db = get_db()
+    code = code.strip().upper()
+
+    coupon = db.coupons.find_one({
+        "code": code,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
     if not coupon:
-        cur.close()
         return jsonify({
             "success": False,
             "status": "invalid",
             "message": "Coupon not found"
         }), 404
 
-    coupon_id, points, status = coupon
+    status = (coupon.get("status") or "").strip().lower()
 
     if status == "redeemed":
-        cur.close()
         return jsonify({
             "success": False,
             "status": "already",
             "message": "Coupon already redeemed",
-            "points": points
+            "points": int(coupon.get("points") or 0)
         }), 200
 
-    cur.execute("""
-        UPDATE coupons
-        SET status = 'redeemed',
-            scanned_at = NOW()
-        WHERE id = %s
-    """, (coupon_id,))
-    mysql.connection.commit()
-    cur.close()
+    db.coupons.update_one(
+        {"_id": coupon["_id"]},
+        {
+            "$set": {
+                "status": "redeemed",
+                "is_redeemed": 1,
+                "scanned_at": now(),
+                "redeemed_at": now()
+            }
+        }
+    )
 
     return jsonify({
         "success": True,
         "status": "success",
         "message": "Coupon applied successfully",
-        "points": points
+        "points": int(coupon.get("points") or 0)
     }), 200
+
 
 
 @admin_bp.route("/salesman/products/search")
 def salesman_product_search():
+
     if "user_id" not in session or session.get("user_role") != "sales":
         return {"items": []}
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
+
     company_id = session.get("company_id")
     q = request.args.get("q", "").strip()
 
-    cur = mysql.connection.cursor()
+    match_filter = {
+        "company_id": company_id,
+        "is_deleted": 0,
+        "part_no": {"$nin": [None, ""]},
+        "product_name": {"$nin": [None, ""]}
+    }
 
-    if not q:
-        cur.execute("""
-            SELECT
-                part_no,
-                product_name,
-                product_type,
-                pack_size,
-                mrp,
-                dlp,
-                points
-            FROM coupons
-            WHERE company_id = %s
-              AND is_deleted = 0
-              AND part_no IS NOT NULL
-              AND product_name IS NOT NULL
-            GROUP BY part_no, product_name, product_type, pack_size, mrp, dlp, points
-            ORDER BY MAX(id) DESC
-            LIMIT 20
-        """, (company_id,))
-    else:
-        cur.execute("""
-            SELECT
-                part_no,
-                product_name,
-                product_type,
-                pack_size,
-                mrp,
-                dlp,
-                points
-            FROM coupons
-            WHERE company_id = %s
-              AND is_deleted = 0
-              AND (
-                    part_no LIKE %s
-                    OR product_name LIKE %s
-                  )
-            GROUP BY part_no, product_name, product_type, pack_size, mrp, dlp, points
-            ORDER BY MAX(id) DESC
-            LIMIT 20
-        """, (company_id, f"%{q}%", f"%{q}%"))
+    if q:
+        match_filter["$or"] = [
+            {"part_no": {"$regex": q, "$options": "i"}},
+            {"product_name": {"$regex": q, "$options": "i"}}
+        ]
 
-    rows = cur.fetchall()
-    cur.close()
+    pipeline = [
+        {"$match": match_filter},
+
+        {
+            "$group": {
+                "_id": {
+                    "part_no": "$part_no",
+                    "product_name": "$product_name",
+                    "product_type": "$product_type",
+                    "pack_size": "$pack_size",
+                    "mrp": "$mrp",
+                    "dlp": "$dlp",
+                    "points": "$points"
+                },
+                "latest_id": {"$max": "$_id"}
+            }
+        },
+
+        {
+            "$sort": {
+                "latest_id": -1
+            }
+        },
+
+        {
+            "$limit": 20
+        }
+    ]
+
+    rows = list(db.coupons.aggregate(pipeline))
 
     items = []
+
     for r in rows:
+        item = r.get("_id", {})
+
         items.append({
-            "part_no": r[0] or "",
-            "product_name": r[1] or "",
-            "product_type": r[2] or "",
-            "pack_size": r[3] or "",
-            "mrp": float(r[4] or 0),
-            "dlp": float(r[5] or 0),
-            "points": int(r[6] or 0)
+            "part_no": item.get("part_no", ""),
+            "product_name": item.get("product_name", ""),
+            "product_type": item.get("product_type", ""),
+            "pack_size": item.get("pack_size", ""),
+            "mrp": float(item.get("mrp") or 0),
+            "dlp": float(item.get("dlp") or 0),
+            "points": int(item.get("points") or 0)
         })
 
     return {"items": items}
@@ -3200,36 +3541,53 @@ def salesman_product_search():
 
 @admin_bp.route("/employee/orders")
 def general_employee_orders():
+
     if "user_id" not in session or session.get("user_role") not in ["employee", "admin"]:
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
-    cur = mysql.connection.cursor()
 
-    cur.execute("""
-        SELECT
-            o.id,
-            o.order_no,
-            d.name AS dealer_name,
-            u.name AS salesman_name,
-            o.part_no,
-            o.part_name,
-            o.order_status,
-            o.total_amount,
-            o.created_at
-        FROM dealer_orders o
-        JOIN distributors d ON o.dealer_id = d.id
-        JOIN users u ON o.salesman_id = u.id
-        WHERE d.company_id = %s
-        ORDER BY o.id DESC
-    """, (company_id,))
+    rows = db.dealer_orders.find({
+        "company_id": company_id
+    }).sort("_id", -1)
 
-    orders = cur.fetchall()
-    cur.close()
+    orders = []
 
-    return render_template("general_employee_orders.html", orders=orders)
+    for order in rows:
+        dealer_name = "N/A"
+        salesman_name = "N/A"
+
+        dealer_id = order.get("dealer_id")
+        salesman_id = order.get("salesman_id")
+
+        if dealer_id:
+            dealer = db.distributors.find_one({"_id": oid(dealer_id)})
+            if dealer:
+                dealer_name = dealer.get("name", "N/A")
+
+        if salesman_id:
+            salesman = db.users.find_one({"_id": oid(salesman_id)})
+            if salesman:
+                salesman_name = salesman.get("name", "N/A")
+
+        orders.append((
+            str(order.get("_id")),
+            order.get("order_no", ""),
+            dealer_name,
+            salesman_name,
+            order.get("part_no", ""),
+            order.get("part_name", ""),
+            order.get("order_status", ""),
+            float(order.get("total_amount") or 0),
+            order.get("created_at", "")
+        ))
+
+    return render_template(
+        "general_employee_orders.html",
+        orders=orders
+    )
 
 from flask import request, jsonify, current_app
 from werkzeug.security import check_password_hash
@@ -3324,37 +3682,24 @@ def dealer_login_api():
 @admin_bp.route("/api/dealer/logout", methods=["POST"])
 def dealer_logout_api():
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
         dealer_id = data.get("dealer_id")
 
         if not dealer_id:
-            return jsonify({
-                "success": False,
-                "message": "Dealer ID is required"
-            }), 400
+            return jsonify({"success": False, "message": "Dealer ID is required"}), 400
 
-        mysql = current_app.config["MYSQL_INSTANCE"]
-        cur = mysql.connection.cursor()
+        db = get_db()
 
-        cur.execute("""
-            UPDATE distributors
-            SET active_token = NULL
-            WHERE id = %s
-        """, (dealer_id,))
-        mysql.connection.commit()
-        cur.close()
+        db.distributors.update_one(
+            {"_id": oid(dealer_id)},
+            {"$set": {"active_token": None, "last_logout": now()}}
+        )
 
-        return jsonify({
-            "success": True,
-            "message": "Logged out successfully"
-        }), 200
+        return jsonify({"success": True, "message": "Logged out successfully"}), 200
 
     except Exception as e:
         current_app.logger.exception("Dealer logout API error")
-        return jsonify({
-            "success": False,
-            "message": f"Server error: {str(e)}"
-        }), 500
+        return jsonify({"success": False, "message": str(e)}), 500
     
 @csrf.exempt
 @admin_bp.route("/api/dealer/scan/<code>/<dealer_id>", methods=["POST"])
@@ -3474,49 +3819,43 @@ from flask import request, jsonify, current_app
 
 @admin_bp.route("/api/dealer/scanned-history/<dealer_id>", methods=["GET"])
 def dealer_scanned_history_api(dealer_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
     from_date = request.args.get("from_date", "").strip()
     to_date = request.args.get("to_date", "").strip()
 
-    query = """
-        SELECT
-            code,
-            part_no,
-            product_name,
-            points,
-            scanned_at,
-            status
-        FROM coupons
-        WHERE dealer_id = %s
-          AND status IN ('scanned', 'redeemed')
-    """
-    params = [dealer_id]
+    query = {
+        "dealer_id": dealer_id,
+        "status": {"$in": ["scanned", "redeemed"]},
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }
 
-    if from_date:
-        query += " AND DATE(scanned_at) >= %s"
-        params.append(from_date)
+    if from_date or to_date:
+        query["scanned_at"] = {}
 
-    if to_date:
-        query += " AND DATE(scanned_at) <= %s"
-        params.append(to_date)
+        if from_date:
+            query["scanned_at"]["$gte"] = datetime.strptime(from_date, "%Y-%m-%d")
 
-    query += " ORDER BY scanned_at DESC, id DESC"
+        if to_date:
+            end_date = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
+            query["scanned_at"]["$lt"] = end_date
 
-    cur.execute(query, tuple(params))
-    rows = cur.fetchall()
-    cur.close()
+    rows = db.coupons.find(query).sort("scanned_at", -1)
 
     history = []
     for r in rows:
         history.append({
-            "code": r[0],
-            "part_no": r[1],
-            "product_name": r[2],
-            "points": int(r[3] or 0),
-            "scanned_at": str(r[4] or ""),
-            "status": r[5]
+            "code": r.get("code", ""),
+            "part_no": r.get("part_no", ""),
+            "product_name": r.get("product_name", ""),
+            "points": int(r.get("points") or 0),
+            "scanned_at": str(r.get("scanned_at") or ""),
+            "status": r.get("status", "")
         })
 
     return jsonify({
@@ -3528,32 +3867,20 @@ from flask import jsonify, current_app
 
 @admin_bp.route("/api/dealer/sets/<dealer_id>", methods=["GET"])
 def dealer_sets_api(dealer_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
-    cur.execute("""
-        SELECT
-            part_no,
-            set_size,
-            total_scans,
-            completed_sets,
-            remaining_scans,
-            total_points
-        FROM dealer_coupon_sets
-        WHERE dealer_id = %s
-        ORDER BY id ASC
-    """, (dealer_id,))
-
-    rows = cur.fetchall()
-    cur.close()
+    rows = db.dealer_coupon_sets.find({
+        "dealer_id": dealer_id
+    }).sort("part_no", 1)
 
     sets = []
+
     for r in rows:
-        part_no = r[0] or "-"
-        set_size = int(r[1] or 10)
-        total_scans = int(r[2] or 0)
-        completed_sets = int(r[3] or 0)
-        total_points = int(r[5] or 0)
+        part_no = r.get("part_no") or "-"
+        set_size = int(r.get("set_size") or 10)
+        total_scans = int(r.get("total_scans") or 0)
+        completed_sets = int(r.get("completed_sets") or 0)
+        total_points = int(r.get("total_points") or 0)
 
         current_progress = total_scans % set_size
         if current_progress == 0 and total_scans > 0:
@@ -3581,113 +3908,121 @@ def dealer_sets_api(dealer_id):
 
 @admin_bp.route("/employee/manual-settlement", methods=["POST"])
 def manual_settlement():
+
     if "user_id" not in session or session.get("user_role") not in ["employee", "admin"]:
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    dealer_id = request.form.get("dealer_id")
-    part_no = request.form.get("part_no")
+    db = get_db()
+
+    dealer_id = request.form.get("dealer_id", "").strip()
+    part_no = request.form.get("part_no", "").strip()
     remarks = request.form.get("remarks", "").strip()
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    if not dealer_id or not part_no:
+        flash("Dealer and part number are required.", "danger")
+        return redirect(url_for("admin.pending_redemptions"))
 
-    # take first 10 scanned coupons of same part
-    cur.execute("""
-        SELECT id, product_name, points
-        FROM coupons
-        WHERE dealer_id = %s
-          AND part_no = %s
-          AND status = 'scanned'
-        ORDER BY scanned_at ASC, id ASC
-        LIMIT 10
-    """, (dealer_id, part_no))
-    coupons = cur.fetchall()
+    coupons = list(
+        db.coupons.find({
+            "dealer_id": dealer_id,
+            "part_no": part_no,
+            "status": "scanned"
+        })
+        .sort("scanned_at", 1)
+        .limit(10)
+    )
 
     if len(coupons) < 10:
-        cur.close()
         flash("At least 10 scanned coupons are required for settlement.", "danger")
         return redirect(url_for("admin.pending_redemptions"))
 
-    coupon_ids = [str(c[0]) for c in coupons]
-    product_name = coupons[0][1]
-    total_points = sum(int(c[2] or 0) for c in coupons)
+    coupon_ids = [c["_id"] for c in coupons]
+    product_name = coupons[0].get("product_name", "")
+    total_points = sum(int(c.get("points") or 0) for c in coupons)
 
-    # redeem these 10
-    cur.execute(f"""
-        UPDATE coupons
-        SET status = 'redeemed',
-            redeemed_by = %s,
-            redeemed_at = NOW()
-        WHERE id IN ({",".join(coupon_ids)})
-    """, (session["user_id"],))
+    db.coupons.update_many(
+        {"_id": {"$in": coupon_ids}},
+        {
+            "$set": {
+                "status": "redeemed",
+                "is_redeemed": 1,
+                "redeemed_by": session.get("user_id"),
+                "redeemed_at": now()
+            }
+        }
+    )
 
-    # wallet update
-    cur.execute("""
-        SELECT id
-        FROM dealer_wallets
-        WHERE dealer_id = %s
-        LIMIT 1
-    """, (dealer_id,))
-    wallet = cur.fetchone()
+    db.dealer_wallets.update_one(
+        {"dealer_id": dealer_id},
+        {
+            "$inc": {
+                "total_points": total_points
+            },
+            "$set": {
+                "dealer_id": dealer_id,
+                "updated_at": now()
+            }
+        },
+        upsert=True
+    )
 
-    if wallet:
-        cur.execute("""
-            UPDATE dealer_wallets
-            SET total_points = total_points + %s
-            WHERE dealer_id = %s
-        """, (total_points, dealer_id))
-    else:
-        cur.execute("""
-            INSERT INTO dealer_wallets (dealer_id, total_points)
-            VALUES (%s, %s)
-        """, (dealer_id, total_points))
+    db.wallet_transactions.insert_one({
+        "dealer_id": dealer_id,
+        "coupon_id": None,
+        "points": total_points,
+        "transaction_type": "credit",
+        "remarks": f"Settlement for part {part_no}",
+        "created_by": session.get("user_id"),
+        "company_id": session.get("company_id"),
+        "created_at": now()
+    })
 
-    # transaction entry
-    cur.execute("""
-        INSERT INTO wallet_transactions
-        (dealer_id, coupon_id, points, transaction_type, remarks, created_by)
-        VALUES (%s, NULL, %s, 'credit', %s, %s)
-    """, (dealer_id, total_points, f"Settlement for part {part_no}", session["user_id"]))
+    db.dealer_settlements.insert_one({
+        "dealer_id": dealer_id,
+        "part_no": part_no,
+        "product_name": product_name,
+        "settled_sets": 1,
+        "coupons_count": 10,
+        "total_points": total_points,
+        "settlement_type": "manual",
+        "remarks": remarks,
+        "settled_by": session.get("user_id"),
+        "company_id": session.get("company_id"),
+        "created_at": now()
+    })
 
-    # settlement history
-    cur.execute("""
-        INSERT INTO dealer_settlements
-        (dealer_id, part_no, product_name, settled_sets, coupons_count, total_points, settlement_type, remarks, settled_by)
-        VALUES (%s, %s, %s, 1, 10, %s, 'manual', %s, %s)
-    """, (dealer_id, part_no, product_name, total_points, remarks, session["user_id"]))
+    remaining_coupons = list(db.coupons.find({
+        "dealer_id": dealer_id,
+        "part_no": part_no,
+        "status": "scanned"
+    }))
 
-    # refresh summary table
-    cur.execute("""
-        SELECT COUNT(*), COALESCE(SUM(points), 0)
-        FROM coupons
-        WHERE dealer_id = %s
-          AND part_no = %s
-          AND status = 'scanned'
-    """, (dealer_id, part_no))
-    scanned_count, scanned_points = cur.fetchone()
+    scanned_count = len(remaining_coupons)
+    scanned_points = sum(int(c.get("points") or 0) for c in remaining_coupons)
 
     completed_sets = scanned_count // 10
     remaining_scans = scanned_count % 10
 
-    cur.execute("""
-        UPDATE dealer_coupon_sets
-        SET total_scans = %s,
-            completed_sets = %s,
-            remaining_scans = %s,
-            total_points = %s
-        WHERE dealer_id = %s AND part_no = %s
-    """, (
-        scanned_count,
-        completed_sets,
-        remaining_scans,
-        scanned_points,
-        dealer_id,
-        part_no
-    ))
-
-    mysql.connection.commit()
-    cur.close()
+    db.dealer_coupon_sets.update_one(
+        {
+            "dealer_id": dealer_id,
+            "part_no": part_no
+        },
+        {
+            "$set": {
+                "dealer_id": dealer_id,
+                "part_no": part_no,
+                "total_scans": scanned_count,
+                "completed_sets": completed_sets,
+                "remaining_scans": remaining_scans,
+                "total_points": scanned_points,
+                "set_size": 10,
+                "updated_at": now()
+            }
+        },
+        upsert=True
+    )
 
     flash("Manual settlement completed successfully.", "success")
     return redirect(url_for("admin.pending_redemptions"))
@@ -3705,42 +4040,31 @@ from flask import jsonify, current_app
 
 @admin_bp.route("/api/dealer/wallet/<dealer_id>", methods=["GET"])
 def dealer_wallet_api(dealer_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
-    # total points
-    cur.execute("""
-        SELECT COALESCE(SUM(points), 0)
-        FROM coupons
-        WHERE dealer_id = %s
-          AND status IN ('scanned', 'redeemed')
-    """, (dealer_id,))
-    total_row = cur.fetchone()
-    total_points = int(total_row[0] or 0) if total_row else 0
+    coupons = list(db.coupons.find({
+        "dealer_id": dealer_id,
+        "status": {"$in": ["scanned", "redeemed"]},
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }))
 
-    # part-wise points
-    cur.execute("""
-        SELECT
-            part_no,
-            COALESCE(SUM(points), 0) AS total_points
-        FROM coupons
-        WHERE dealer_id = %s
-          AND status IN ('scanned', 'redeemed')
-          AND part_no IS NOT NULL
-          AND part_no <> ''
-        GROUP BY part_no
-        HAVING SUM(points) > 0
-        ORDER BY part_no ASC
-    """, (dealer_id,))
-    rows = cur.fetchall()
-    cur.close()
+    total_points = sum(int(c.get("points") or 0) for c in coupons)
 
-    part_points = []
-    for r in rows:
-        part_points.append({
-            "part_no": r[0],
-            "points": int(r[1] or 0)
-        })
+    part_map = {}
+    for c in coupons:
+        part_no = c.get("part_no") or "-"
+        part_map[part_no] = part_map.get(part_no, 0) + int(c.get("points") or 0)
+
+    part_points = [
+        {"part_no": part_no, "points": points}
+        for part_no, points in part_map.items()
+        if points > 0
+    ]
 
     return jsonify({
         "success": True,
@@ -3750,276 +4074,259 @@ def dealer_wallet_api(dealer_id):
 
 @admin_bp.route("/employee/redeem-points", methods=["POST"])
 def redeem_points():
+
     if "user_id" not in session or session.get("user_role") not in ["employee", "admin"]:
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    dealer_id = request.form.get("dealer_id")
+    db = get_db()
+
+    dealer_id = request.form.get("dealer_id", "").strip()
     invoice_no = request.form.get("invoice_no", "").strip()
     redemption_type = request.form.get("redemption_type", "manual").strip()
     part_no = request.form.get("part_no", "").strip()
     product_name = request.form.get("product_name", "").strip()
-    sets_count = int(request.form.get("sets_count", 0) or 0)
-    manual_points = int(request.form.get("manual_points", 0) or 0)
     remarks = request.form.get("remarks", "").strip()
+
+    try:
+        sets_count = int(request.form.get("sets_count", 0) or 0)
+    except:
+        sets_count = 0
+
+    try:
+        manual_points = int(request.form.get("manual_points", 0) or 0)
+    except:
+        manual_points = 0
 
     if not dealer_id or not invoice_no:
         flash("Dealer and invoice number are required.", "danger")
         return redirect(url_for("admin.redemptions_page"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
-
-    cur.execute("""
-        SELECT earned_points, redeemed_points, available_points
-        FROM dealer_wallets
-        WHERE dealer_id = %s
-        LIMIT 1
-    """, (dealer_id,))
-    wallet = cur.fetchone()
+    wallet = db.dealer_wallets.find_one({"dealer_id": dealer_id})
 
     if not wallet:
-        cur.close()
         flash("Wallet not found for dealer.", "danger")
         return redirect(url_for("admin.redemptions_page"))
 
-    earned_points = int(wallet[0] or 0)
-    redeemed_points = int(wallet[1] or 0)
-    available_points = int(wallet[2] or 0)
+    earned_points = int(wallet.get("earned_points") or wallet.get("total_points") or 0)
+    redeemed_points = int(wallet.get("redeemed_points") or 0)
+    available_points = int(wallet.get("available_points") or (earned_points - redeemed_points))
 
     redeem_points_value = 0
     coupons_count = 0
 
     if redemption_type == "set":
         if not part_no or sets_count <= 0:
-            cur.close()
             flash("Part no and set count are required for set redemption.", "danger")
             return redirect(url_for("admin.redemptions_page"))
 
-        cur.execute("""
-            SELECT total_points, completed_sets, product_name
-            FROM dealer_coupon_sets
-            WHERE dealer_id = %s AND part_no = %s
-            LIMIT 1
-        """, (dealer_id, part_no))
-        set_row = cur.fetchone()
+        set_row = db.dealer_coupon_sets.find_one({
+            "dealer_id": dealer_id,
+            "part_no": part_no
+        })
 
         if not set_row:
-            cur.close()
             flash("No set summary found for this part.", "danger")
             return redirect(url_for("admin.redemptions_page"))
 
-        total_points_for_part = int(set_row[0] or 0)
-        completed_sets = int(set_row[1] or 0)
+        completed_sets = int(set_row.get("completed_sets") or 0)
+
         if not product_name:
-            product_name = set_row[2] or ""
+            product_name = set_row.get("product_name", "")
 
         if completed_sets < sets_count:
-            cur.close()
             flash("Requested set count is higher than available completed sets.", "danger")
             return redirect(url_for("admin.redemptions_page"))
 
-        # points from first 10 * set_count scanned coupons of same part
-        cur.execute("""
-            SELECT COALESCE(SUM(points), 0)
-            FROM (
-                SELECT points
-                FROM coupons
-                WHERE dealer_id = %s
-                  AND part_no = %s
-                  AND status = 'scanned'
-                ORDER BY scanned_at ASC, id ASC
-                LIMIT %s
-            ) t
-        """, (dealer_id, part_no, sets_count * 10))
-        redeem_points_value = int(cur.fetchone()[0] or 0)
         coupons_count = sets_count * 10
 
+        coupons = list(
+            db.coupons.find({
+                "dealer_id": dealer_id,
+                "part_no": part_no,
+                "status": "scanned"
+            })
+            .sort("scanned_at", 1)
+            .limit(coupons_count)
+        )
+
+        if len(coupons) < coupons_count:
+            flash("Not enough scanned coupons found for this part.", "danger")
+            return redirect(url_for("admin.redemptions_page"))
+
+        redeem_points_value = sum(int(c.get("points") or 0) for c in coupons)
+
         if redeem_points_value <= 0:
-            cur.close()
             flash("No redeemable scanned coupons found for this part.", "danger")
             return redirect(url_for("admin.redemptions_page"))
 
-        # mark those coupons redeemed
-        cur.execute("""
-            SELECT id
-            FROM coupons
-            WHERE dealer_id = %s
-              AND part_no = %s
-              AND status = 'scanned'
-            ORDER BY scanned_at ASC, id ASC
-            LIMIT %s
-        """, (dealer_id, part_no, coupons_count))
-        coupon_ids = [str(r[0]) for r in cur.fetchall()]
+        coupon_ids = [c["_id"] for c in coupons]
 
-        if coupon_ids:
-            cur.execute(f"""
-                UPDATE coupons
-                SET status = 'redeemed',
-                    redeemed_by = %s,
-                    redeemed_at = NOW()
-                WHERE id IN ({",".join(coupon_ids)})
-            """, (session["user_id"],))
+        db.coupons.update_many(
+            {"_id": {"$in": coupon_ids}},
+            {
+                "$set": {
+                    "status": "redeemed",
+                    "is_redeemed": 1,
+                    "redeemed_by": session.get("user_id"),
+                    "redeemed_at": now()
+                }
+            }
+        )
 
-        # refresh set summary
-        cur.execute("""
-            SELECT COUNT(*), COALESCE(SUM(points), 0)
-            FROM coupons
-            WHERE dealer_id = %s
-              AND part_no = %s
-              AND status = 'scanned'
-        """, (dealer_id, part_no))
-        scanned_count, scanned_points = cur.fetchone()
+        remaining_coupons = list(db.coupons.find({
+            "dealer_id": dealer_id,
+            "part_no": part_no,
+            "status": "scanned"
+        }))
 
-        new_completed_sets = scanned_count // 10
-        remaining_scans = scanned_count % 10
+        scanned_count = len(remaining_coupons)
+        scanned_points = sum(int(c.get("points") or 0) for c in remaining_coupons)
 
-        cur.execute("""
-            UPDATE dealer_coupon_sets
-            SET total_scans = %s,
-                completed_sets = %s,
-                remaining_scans = %s,
-                total_points = %s
-            WHERE dealer_id = %s AND part_no = %s
-        """, (
-            scanned_count,
-            new_completed_sets,
-            remaining_scans,
-            scanned_points,
-            dealer_id,
-            part_no
-        ))
+        db.dealer_coupon_sets.update_one(
+            {
+                "dealer_id": dealer_id,
+                "part_no": part_no
+            },
+            {
+                "$set": {
+                    "total_scans": scanned_count,
+                    "completed_sets": scanned_count // 10,
+                    "remaining_scans": scanned_count % 10,
+                    "total_points": scanned_points,
+                    "updated_at": now()
+                }
+            }
+        )
 
     else:
         redeem_points_value = manual_points
         coupons_count = 0
 
         if redeem_points_value <= 0:
-            cur.close()
             flash("Manual points must be greater than zero.", "danger")
             return redirect(url_for("admin.redemptions_page"))
 
     if available_points < redeem_points_value:
-        cur.close()
         flash("Not enough available points.", "danger")
         return redirect(url_for("admin.redemptions_page"))
 
     new_redeemed_points = redeemed_points + redeem_points_value
     new_available_points = earned_points - new_redeemed_points
 
-    cur.execute("""
-        UPDATE dealer_wallets
-        SET redeemed_points = %s,
-            available_points = %s
-        WHERE dealer_id = %s
-    """, (new_redeemed_points, new_available_points, dealer_id))
+    db.dealer_wallets.update_one(
+        {"dealer_id": dealer_id},
+        {
+            "$set": {
+                "earned_points": earned_points,
+                "redeemed_points": new_redeemed_points,
+                "available_points": new_available_points,
+                "updated_at": now()
+            }
+        },
+        upsert=True
+    )
 
-    cur.execute("""
-        INSERT INTO dealer_redemptions
-        (dealer_id, invoice_no, redemption_type, part_no, product_name, sets_count, coupons_count, redeemed_points, remarks, redeemed_by)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """, (
-        dealer_id,
-        invoice_no,
-        redemption_type,
-        part_no if part_no else None,
-        product_name if product_name else None,
-        sets_count,
-        coupons_count,
-        redeem_points_value,
-        remarks,
-        session["user_id"]
-    ))
+    db.dealer_redemptions.insert_one({
+        "dealer_id": dealer_id,
+        "invoice_no": invoice_no,
+        "redemption_type": redemption_type,
+        "part_no": part_no if part_no else None,
+        "product_name": product_name if product_name else None,
+        "sets_count": sets_count,
+        "coupons_count": coupons_count,
+        "redeemed_points": redeem_points_value,
+        "remarks": remarks,
+        "redeemed_by": session.get("user_id"),
+        "company_id": session.get("company_id"),
+        "created_at": now()
+    })
 
-    cur.execute("""
-        INSERT INTO wallet_transactions
-        (dealer_id, coupon_id, points, transaction_type, remarks, created_by)
-        VALUES (%s, NULL, %s, 'redeem_invoice', %s, %s)
-    """, (
-        dealer_id,
-        redeem_points_value,
-        f"Invoice {invoice_no}",
-        session["user_id"]
-    ))
-
-    mysql.connection.commit()
-    cur.close()
+    db.wallet_transactions.insert_one({
+        "dealer_id": dealer_id,
+        "coupon_id": None,
+        "points": redeem_points_value,
+        "transaction_type": "redeem_invoice",
+        "remarks": f"Invoice {invoice_no}",
+        "created_by": session.get("user_id"),
+        "company_id": session.get("company_id"),
+        "created_at": now()
+    })
 
     flash("Points redeemed successfully.", "success")
     return redirect(url_for("admin.redemptions_page"))
 
 @admin_bp.route("/employee/redemption-history")
 def redemption_history():
+
     if "user_id" not in session or session.get("user_role") not in ["employee", "admin"]:
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
-    cur = mysql.connection.cursor()
 
-    cur.execute("""
-        SELECT
-            r.id,
-            d.name,
-            r.invoice_no,
-            r.redemption_type,
-            r.part_no,
-            r.product_name,
-            r.sets_count,
-            r.coupons_count,
-            r.redeemed_points,
-            r.remarks,
-            r.created_at
-        FROM dealer_redemptions r
-        JOIN distributors d ON r.dealer_id = d.id
-        WHERE d.company_id = %s
-        ORDER BY r.id DESC
-    """, (company_id,))
-    rows = cur.fetchall()
-    cur.close()
+    redemptions_cursor = db.dealer_redemptions.find({
+        "company_id": company_id
+    }).sort("created_at", -1)
 
-    return render_template("redemption_history.html", redemptions=rows)
+    rows = []
+
+    for r in redemptions_cursor:
+
+        dealer_name = "Unknown"
+
+        dealer_id = r.get("dealer_id")
+
+        if dealer_id:
+            dealer = db.distributors.find_one({
+                "_id": oid(dealer_id)
+            })
+
+            if dealer:
+                dealer_name = dealer.get("name", "Unknown")
+
+        rows.append((
+            str(r.get("_id")),
+            dealer_name,
+            r.get("invoice_no", ""),
+            r.get("redemption_type", ""),
+            r.get("part_no", ""),
+            r.get("product_name", ""),
+            int(r.get("sets_count") or 0),
+            int(r.get("coupons_count") or 0),
+            int(r.get("redeemed_points") or 0),
+            r.get("remarks", ""),
+            r.get("created_at")
+        ))
+
+    return render_template(
+        "redemption_history.html",
+        redemptions=rows
+    )
 
 @admin_bp.route("/api/dealer/redemption-history/<dealer_id>", methods=["GET"])
 def dealer_redemption_history_api(dealer_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
-    cur.execute("""
-        SELECT
-            r.invoice_no,
-            r.redemption_type,
-            r.part_no,
-            r.product_name,
-            r.sets_count,
-            r.coupons_count,
-            r.redeemed_points,
-            r.remarks,
-            r.created_at,
-            COALESCE(u.name, '-') AS redeemed_by
-        FROM dealer_redemptions r
-        LEFT JOIN users u ON r.redeemed_by = u.id
-        WHERE r.dealer_id = %s
-        ORDER BY r.id DESC
-        LIMIT 100
-    """, (dealer_id,))
-    rows = cur.fetchall()
-    cur.close()
+    rows = db.dealer_redemptions.find({
+        "dealer_id": dealer_id
+    }).sort("created_at", -1).limit(100)
 
     history = []
+
     for r in rows:
         history.append({
-            "invoice_no": r[0] or "",
-            "type": r[1] or "",
-            "part_no": r[2] or "-",
-            "product_name": r[3] or "-",
-            "sets": int(r[4] or 0),
-            "coupons": int(r[5] or 0),
-            "points": int(r[6] or 0),
-            "remarks": r[7] or "",
-            "redeemed_at": str(r[8] or ""),
-            "redeemed_by": r[9] or "-"
+            "invoice_no": r.get("invoice_no", ""),
+            "type": r.get("redemption_type", ""),
+            "part_no": r.get("part_no", "-"),
+            "product_name": r.get("product_name", "-"),
+            "sets": int(r.get("sets_count") or 0),
+            "coupons": int(r.get("coupons_count") or 0),
+            "points": int(r.get("redeemed_points") or 0),
+            "remarks": r.get("remarks", ""),
+            "redeemed_at": str(r.get("created_at") or ""),
+            "redeemed_by": str(r.get("redeemed_by") or "-")
         })
 
     return jsonify({
@@ -4033,58 +4340,66 @@ from flask import jsonify
 
 @admin_bp.route("/api/dealer/banners/<dealer_id>", methods=["GET"])
 def dealer_banners_api(dealer_id):
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
-    # Get dealer's company
-    cur.execute("""
-        SELECT company_id
-        FROM distributors
-        WHERE id = %s
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-        LIMIT 1
-    """, (dealer_id,))
-    dealer = cur.fetchone()
+    dealer = db.distributors.find_one({
+        "_id": oid(dealer_id),
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
     if not dealer:
-        cur.close()
         return jsonify({
             "success": False,
             "message": "Dealer not found",
             "banners": []
         }), 404
 
-    company_id = dealer[0]
+    company_id = dealer.get("company_id")
 
-    # Get only the latest active banner
-    cur.execute("""
-        SELECT id, title, image
-        FROM banners
-        WHERE company_id = %s
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-          AND (is_active = 1 OR is_active IS NULL)
-        ORDER BY id DESC
-        LIMIT 1
-    """, (company_id,))
-    row = cur.fetchone()
-    cur.close()
+    banner = db.banners.find_one(
+        {
+            "company_id": company_id,
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ],
+            "$and": [
+                {
+                    "$or": [
+                        {"is_active": 1},
+                        {"is_active": True},
+                        {"is_active": {"$exists": False}},
+                        {"is_active": None}
+                    ]
+                }
+            ]
+        },
+        sort=[("_id", -1)]
+    )
 
-    if not row:
+    if not banner:
         return jsonify({
             "success": True,
             "message": "No banner found",
             "banners": []
         }), 200
 
-    banner = {
-        "id": row[0],
-        "title": row[1] or "",
-        "image_url": f"http://192.168.1.17:5000/static/uploads/{row[2]}" if row[2] else ""
-    }
+    image = banner.get("image", "")
 
     return jsonify({
         "success": True,
-        "banners": [banner]
+        "banners": [{
+            "id": str(banner.get("_id")),
+            "title": banner.get("title", ""),
+            "image_url": request.host_url.rstrip("/") + "/static/uploads/" + image if image else ""
+        }]
     }), 200
 
 
@@ -4107,11 +4422,13 @@ def upload_profile_image(dealer_id):
 
         image = request.files["profile_image"]
 
-        ext = image.filename.rsplit(".", 1)[-1].lower()
+        if not image or image.filename == "":
+            return jsonify({"success": False, "message": "No selected file"}), 400
 
+        ext = image.filename.rsplit(".", 1)[-1].lower()
         filename = f"dealer_{dealer_id}_{int(time.time())}.{ext}"
 
-        folder = os.path.join(current_app.root_path, "static/uploads/profiles")
+        folder = os.path.join(current_app.root_path, "static", "uploads", "profiles")
         os.makedirs(folder, exist_ok=True)
 
         path = os.path.join(folder, filename)
@@ -4119,22 +4436,18 @@ def upload_profile_image(dealer_id):
 
         db_path = f"profiles/{filename}"
 
-        mysql = current_app.config["MYSQL_INSTANCE"]
-        cur = mysql.connection.cursor()
+        db = get_db()
 
-        cur.execute("""
-            UPDATE distributors
-            SET profile_image=%s
-            WHERE id=%s
-        """, (db_path, dealer_id))
-
-        mysql.connection.commit()
-        cur.close()
+        db.distributors.update_one(
+            {"_id": oid(dealer_id)},
+            {"$set": {"profile_image": db_path, "updated_at": now()}}
+        )
 
         image_url = request.host_url.rstrip("/") + "/static/uploads/" + db_path
 
         return jsonify({
             "success": True,
+            "message": "Profile image updated",
             "profile_image": image_url
         }), 200
 
@@ -4158,19 +4471,42 @@ def company_admin_distributors_crud():
     )
 
 
-@admin_bp.route("/company-admin/retailers", methods=["GET"])
-def company_admin_retailers_CRUD_page():
-    if not _check_company_admin():
+@admin_bp.route("/company-admin/retailers")
+def company_admin_retailers_page():
+    if "user_id" not in session or session.get("user_role") != "admin":
+        flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
+    db = get_db()
     company_id = session.get("company_id")
-    retailers = _fetch_entities("retailers", company_id)
 
-    return render_template(
-        "company_admin_retailers.html",
-        retailers=retailers,
-        edit_item=None
-    )
+    rows = db.retailers.find({
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }).sort("_id", -1)
+
+    retailers = []
+
+    for row in rows:
+        retailers.append({
+            "id": str(row.get("_id")),
+            "dealer_code": row.get("dealer_code", ""),
+            "name": row.get("name", ""),
+            "mobile": row.get("mobile", ""),
+            "email": row.get("email", ""),
+            "pan": row.get("pan", ""),
+            "gst": row.get("gst", ""),
+            "city": row.get("city", ""),
+            "state": row.get("state", ""),
+            "address": row.get("address", "")
+        })
+
+    return render_template("company_admin_retailers.html", retailers=retailers)
 
 
 @admin_bp.route("/company-admin/mechanics", methods=["GET"])
@@ -4190,6 +4526,7 @@ def company_admin_mechanics_CRUD_page():
 
 @admin_bp.route("/company-admin/<entity_type>/add", methods=["POST"])
 def add_entity(entity_type):
+
     if not _check_company_admin():
         return redirect(url_for("auth.login"))
 
@@ -4197,7 +4534,7 @@ def add_entity(entity_type):
         flash("Invalid entity type.", "danger")
         return redirect(url_for("admin.company_admin_dashboard"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
     label = _get_entity_label(entity_type)
 
@@ -4205,6 +4542,7 @@ def add_entity(entity_type):
     name = request.form.get("name", "").strip()
     mobile = request.form.get("mobile", "").strip()
     email = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "").strip()
     pan = request.form.get("pan", "").strip().upper()
     gst = request.form.get("gst", "").strip().upper()
     city = request.form.get("city", "").strip()
@@ -4215,83 +4553,62 @@ def add_entity(entity_type):
         flash(f"{label} code, name and mobile are required.", "danger")
         return redirect(url_for(f"admin.company_admin_{entity_type}_page"))
 
-    cur = mysql.connection.cursor()
+    existing_code = db[entity_type].find_one({
+        "company_id": company_id,
+        "dealer_code": dealer_code,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
-    try:
-        cur.execute(f"""
-            SELECT id
-            FROM {entity_type}
-            WHERE company_id = %s
-              AND dealer_code = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            LIMIT 1
-        """, (company_id, dealer_code))
-        existing_code = cur.fetchone()
+    if existing_code:
+        flash(f"{label} code already exists.", "danger")
+        return redirect(url_for(f"admin.company_admin_{entity_type}_page"))
 
-        if existing_code:
-            cur.close()
-            flash(f"{label} code already exists.", "danger")
+    if email:
+        existing_email = db[entity_type].find_one({
+            "company_id": company_id,
+            "email": email,
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
+
+        if existing_email:
+            flash(f"{label} email already exists.", "danger")
             return redirect(url_for(f"admin.company_admin_{entity_type}_page"))
 
-        if email:
-            cur.execute(f"""
-                SELECT id
-                FROM {entity_type}
-                WHERE company_id = %s
-                  AND email = %s
-                  AND (is_deleted = 0 OR is_deleted IS NULL)
-                LIMIT 1
-            """, (company_id, email))
-            existing_email = cur.fetchone()
+    hashed_password = generate_password_hash(password) if password else None
 
-            if existing_email:
-                cur.close()
-                flash(f"{label} email already exists.", "danger")
-                return redirect(url_for(f"admin.company_admin_{entity_type}_page"))
+    db[entity_type].insert_one({
+        "dealer_code": dealer_code,
+        "name": name,
+        "mobile": mobile,
+        "email": email,
+        "password": hashed_password,
+        "pan": pan,
+        "gst": gst,
+        "city": city,
+        "state": state,
+        "address": address,
+        "company_id": company_id,
+        "is_deleted": 0,
+        "created_at": now()
+    })
 
-        cur.execute(f"""
-            INSERT INTO {entity_type}
-            (
-                dealer_code,
-                name,
-                mobile,
-                email,
-                pan,
-                gst,
-                city,
-                state,
-                address,
-                company_id,
-                is_deleted
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0)
-        """, (
-            dealer_code,
-            name,
-            mobile,
-            email,
-            pan,
-            gst,
-            city,
-            state,
-            address,
-            company_id
-        ))
-
-        mysql.connection.commit()
-        cur.close()
-
-        flash(f"{label} added successfully.", "success")
-    except Exception as e:
-        mysql.connection.rollback()
-        cur.close()
-        flash(f"Error adding {label.lower()}: {str(e)}", "danger")
-
+    flash(f"{label} added successfully.", "success")
     return redirect(url_for(f"admin.company_admin_{entity_type}_page"))
 
 
 @admin_bp.route("/company-admin/<entity_type>/edit/<record_id>", methods=["GET", "POST"])
 def edit_entity(entity_type, record_id):
+
     if not _check_company_admin():
         return redirect(url_for("auth.login"))
 
@@ -4299,10 +4616,12 @@ def edit_entity(entity_type, record_id):
         flash("Invalid entity type.", "danger")
         return redirect(url_for("admin.company_admin_dashboard"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
     label = _get_entity_label(entity_type)
     template_name = _get_entity_template(entity_type)
+
+    record_obj_id = oid(record_id)
 
     if request.method == "POST":
         dealer_code = request.form.get("dealer_code", "").strip()
@@ -4319,82 +4638,72 @@ def edit_entity(entity_type, record_id):
             flash(f"{label} code, name and mobile are required.", "danger")
             return redirect(url_for("admin.edit_entity", entity_type=entity_type, record_id=record_id))
 
-        cur = mysql.connection.cursor()
+        existing_code = db[entity_type].find_one({
+            "company_id": company_id,
+            "dealer_code": dealer_code,
+            "_id": {"$ne": record_obj_id},
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
 
-        try:
-            cur.execute(f"""
-                SELECT id
-                FROM {entity_type}
-                WHERE company_id = %s
-                  AND dealer_code = %s
-                  AND id != %s
-                  AND (is_deleted = 0 OR is_deleted IS NULL)
-                LIMIT 1
-            """, (company_id, dealer_code, record_id))
-            existing_code = cur.fetchone()
+        if existing_code:
+            flash(f"{label} code already exists.", "danger")
+            return redirect(url_for("admin.edit_entity", entity_type=entity_type, record_id=record_id))
 
-            if existing_code:
-                cur.close()
-                flash(f"{label} code already exists.", "danger")
+        if email:
+            existing_email = db[entity_type].find_one({
+                "company_id": company_id,
+                "email": email,
+                "_id": {"$ne": record_obj_id},
+                "$or": [
+                    {"is_deleted": 0},
+                    {"is_deleted": False},
+                    {"is_deleted": {"$exists": False}},
+                    {"is_deleted": None}
+                ]
+            })
+
+            if existing_email:
+                flash(f"{label} email already exists.", "danger")
                 return redirect(url_for("admin.edit_entity", entity_type=entity_type, record_id=record_id))
 
-            if email:
-                cur.execute(f"""
-                    SELECT id
-                    FROM {entity_type}
-                    WHERE company_id = %s
-                      AND email = %s
-                      AND id != %s
-                      AND (is_deleted = 0 OR is_deleted IS NULL)
-                    LIMIT 1
-                """, (company_id, email, record_id))
-                existing_email = cur.fetchone()
+        result = db[entity_type].update_one(
+            {
+                "_id": record_obj_id,
+                "company_id": company_id,
+                "$or": [
+                    {"is_deleted": 0},
+                    {"is_deleted": False},
+                    {"is_deleted": {"$exists": False}},
+                    {"is_deleted": None}
+                ]
+            },
+            {
+                "$set": {
+                    "dealer_code": dealer_code,
+                    "name": name,
+                    "mobile": mobile,
+                    "email": email,
+                    "pan": pan,
+                    "gst": gst,
+                    "city": city,
+                    "state": state,
+                    "address": address,
+                    "updated_at": now()
+                }
+            }
+        )
 
-                if existing_email:
-                    cur.close()
-                    flash(f"{label} email already exists.", "danger")
-                    return redirect(url_for("admin.edit_entity", entity_type=entity_type, record_id=record_id))
-
-            cur.execute(f"""
-                UPDATE {entity_type}
-                SET
-                    dealer_code = %s,
-                    name = %s,
-                    mobile = %s,
-                    email = %s,
-                    pan = %s,
-                    gst = %s,
-                    city = %s,
-                    state = %s,
-                    address = %s
-                WHERE id = %s
-                  AND company_id = %s
-                  AND (is_deleted = 0 OR is_deleted IS NULL)
-            """, (
-                dealer_code,
-                name,
-                mobile,
-                email,
-                pan,
-                gst,
-                city,
-                state,
-                address,
-                record_id,
-                company_id
-            ))
-
-            mysql.connection.commit()
-            cur.close()
-
-            flash(f"{label} updated successfully.", "success")
+        if result.matched_count == 0:
+            flash(f"{label} not found.", "danger")
             return redirect(url_for(f"admin.company_admin_{entity_type}_page"))
 
-        except Exception as e:
-            mysql.connection.rollback()
-            cur.close()
-            flash(f"Error updating {label.lower()}: {str(e)}", "danger")
-            return redirect(url_for("admin.edit_entity", entity_type=entity_type, record_id=record_id))
+        flash(f"{label} updated successfully.", "success")
+        return redirect(url_for(f"admin.company_admin_{entity_type}_page"))
 
     edit_item = _fetch_single_entity(entity_type, company_id, record_id)
     if not edit_item:
@@ -4412,6 +4721,7 @@ def edit_entity(entity_type, record_id):
 
 @admin_bp.route("/company-admin/<entity_type>/delete/<record_id>", methods=["POST"])
 def delete_entity(entity_type, record_id):
+
     if not _check_company_admin():
         return redirect(url_for("auth.login"))
 
@@ -4419,26 +4729,30 @@ def delete_entity(entity_type, record_id):
         flash("Invalid entity type.", "danger")
         return redirect(url_for("admin.company_admin_dashboard"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
     label = _get_entity_label(entity_type)
 
-    cur = mysql.connection.cursor()
     try:
-        cur.execute(f"""
-            UPDATE {entity_type}
-            SET is_deleted = 1
-            WHERE id = %s
-              AND company_id = %s
-        """, (record_id, company_id))
+        result = db[entity_type].update_one(
+            {
+                "_id": oid(record_id),
+                "company_id": company_id
+            },
+            {
+                "$set": {
+                    "is_deleted": 1,
+                    "deleted_at": now()
+                }
+            }
+        )
 
-        mysql.connection.commit()
-        cur.close()
+        if result.matched_count == 0:
+            flash(f"{label} not found.", "danger")
+        else:
+            flash(f"{label} deleted successfully.", "success")
 
-        flash(f"{label} deleted successfully.", "success")
     except Exception as e:
-        mysql.connection.rollback()
-        cur.close()
         flash(f"Error deleting {label.lower()}: {str(e)}", "danger")
 
     return redirect(url_for(f"admin.company_admin_{entity_type}_page"))
@@ -4446,17 +4760,20 @@ def delete_entity(entity_type, record_id):
 
 @admin_bp.route("/company-admin/distributors/edit/<distributor_id>", methods=["GET", "POST"])
 def edit_distributor(distributor_id):
+
     if "user_id" not in session or session.get("user_role") not in ["admin", "sales"]:
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
+
     company_id = session.get("company_id")
     user_role = session.get("user_role")
     user_id = session.get("user_id")
-    cur = mysql.connection.cursor()
 
+    # ================= POST =================
     if request.method == "POST":
+
         dealer_code = request.form.get("dealer_code", "").strip()
         name = request.form.get("name", "").strip()
         mobile = request.form.get("mobile", "").strip()
@@ -4468,151 +4785,144 @@ def edit_distributor(distributor_id):
         address = request.form.get("address", "").strip()
 
         if not dealer_code or not name:
-            cur.close()
             flash("Dealer code and name are required.", "danger")
             return redirect(url_for("admin.edit_distributor", distributor_id=distributor_id))
 
         try:
-            cur.execute("""
-                SELECT id
-                FROM distributors
-                WHERE dealer_code = %s
-                  AND company_id = %s
-                  AND id != %s
-                  AND (is_deleted = 0 OR is_deleted IS NULL)
-                LIMIT 1
-            """, (dealer_code, company_id, distributor_id))
-            existing_code = cur.fetchone()
+
+            existing_code = db.distributors.find_one({
+                "_id": {"$ne": oid(distributor_id)},
+                "dealer_code": dealer_code,
+                "company_id": company_id,
+                "$or": [
+                    {"is_deleted": 0},
+                    {"is_deleted": False},
+                    {"is_deleted": {"$exists": False}},
+                    {"is_deleted": None}
+                ]
+            })
 
             if existing_code:
-                cur.close()
                 flash("Dealer code already exists.", "danger")
                 return redirect(url_for("admin.edit_distributor", distributor_id=distributor_id))
 
             if email:
-                cur.execute("""
-                    SELECT id
-                    FROM distributors
-                    WHERE email = %s
-                      AND company_id = %s
-                      AND id != %s
-                      AND (is_deleted = 0 OR is_deleted IS NULL)
-                    LIMIT 1
-                """, (email, company_id, distributor_id))
-                existing_email = cur.fetchone()
+                existing_email = db.distributors.find_one({
+                    "_id": {"$ne": oid(distributor_id)},
+                    "email": email,
+                    "company_id": company_id,
+                    "$or": [
+                        {"is_deleted": 0},
+                        {"is_deleted": False},
+                        {"is_deleted": {"$exists": False}},
+                        {"is_deleted": None}
+                    ]
+                })
 
                 if existing_email:
-                    cur.close()
                     flash("Email already exists.", "danger")
                     return redirect(url_for("admin.edit_distributor", distributor_id=distributor_id))
 
-            if user_role == "sales":
-                cur.execute("""
-                    UPDATE distributors
-                    SET dealer_code=%s, name=%s, mobile=%s, email=%s, pan=%s, gst=%s,
-                        city=%s, state=%s, address=%s
-                    WHERE id=%s AND company_id=%s AND salesman_id=%s
-                """, (
-                    dealer_code, name, mobile, email, pan, gst,
-                    city, state, address,
-                    distributor_id, company_id, user_id
-                ))
-            else:
-                cur.execute("""
-                    UPDATE distributors
-                    SET dealer_code=%s, name=%s, mobile=%s, email=%s, pan=%s, gst=%s,
-                        city=%s, state=%s, address=%s
-                    WHERE id=%s AND company_id=%s
-                """, (
-                    dealer_code, name, mobile, email, pan, gst,
-                    city, state, address,
-                    distributor_id, company_id
-                ))
+            filter_query = {
+                "_id": oid(distributor_id),
+                "company_id": company_id
+            }
 
-            mysql.connection.commit()
-            cur.close()
+            if user_role == "sales":
+                filter_query["salesman_id"] = user_id
+
+            result = db.distributors.update_one(
+                filter_query,
+                {
+                    "$set": {
+                        "dealer_code": dealer_code,
+                        "name": name,
+                        "mobile": mobile,
+                        "email": email,
+                        "pan": pan,
+                        "gst": gst,
+                        "city": city,
+                        "state": state,
+                        "address": address,
+                        "updated_at": now()
+                    }
+                }
+            )
+
+            if result.matched_count == 0:
+                flash("Distributor not found.", "danger")
+                return redirect(url_for("admin.company_admin_distributors_page"))
+
             flash("Distributor updated successfully.", "success")
             return redirect(url_for("admin.company_admin_distributors_page"))
 
         except Exception as e:
-            mysql.connection.rollback()
-            cur.close()
             flash(f"Error updating distributor: {str(e)}", "danger")
             return redirect(url_for("admin.edit_distributor", distributor_id=distributor_id))
 
-    if user_role == "sales":
-        cur.execute("""
-            SELECT id, dealer_code, name, mobile, email, pan, gst, city, state, address
-            FROM distributors
-            WHERE id = %s
-              AND company_id = %s
-              AND salesman_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            LIMIT 1
-        """, (distributor_id, company_id, user_id))
-    else:
-        cur.execute("""
-            SELECT id, dealer_code, name, mobile, email, pan, gst, city, state, address
-            FROM distributors
-            WHERE id = %s
-              AND company_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            LIMIT 1
-        """, (distributor_id, company_id))
+    # ================= GET =================
+    filter_query = {
+        "_id": oid(distributor_id),
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }
 
-    row = cur.fetchone()
+    if user_role == "sales":
+        filter_query["salesman_id"] = user_id
+
+    row = db.distributors.find_one(filter_query)
+
     if not row:
-        cur.close()
         flash("Distributor not found.", "danger")
         return redirect(url_for("admin.company_admin_distributors_page"))
 
     distributor = {
-        "id": row[0],
-        "dealer_code": row[1] or "",
-        "name": row[2] or "",
-        "mobile": row[3] or "",
-        "email": row[4] or "",
-        "pan": row[5] or "",
-        "gst": row[6] or "",
-        "city": row[7] or "",
-        "state": row[8] or "",
-        "address": row[9] or "",
+        "id": str(row.get("_id")),
+        "dealer_code": row.get("dealer_code", ""),
+        "name": row.get("name", ""),
+        "mobile": row.get("mobile", ""),
+        "email": row.get("email", ""),
+        "pan": row.get("pan", ""),
+        "gst": row.get("gst", ""),
+        "city": row.get("city", ""),
+        "state": row.get("state", ""),
+        "address": row.get("address", "")
+    }
+
+    list_filter = {
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
     }
 
     if user_role == "sales":
-        cur.execute("""
-            SELECT id, dealer_code, name, mobile, email, pan, gst, city, state, address
-            FROM distributors
-            WHERE company_id = %s
-              AND salesman_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            ORDER BY id DESC
-        """, (company_id, user_id))
-    else:
-        cur.execute("""
-            SELECT id, dealer_code, name, mobile, email, pan, gst, city, state, address
-            FROM distributors
-            WHERE company_id = %s
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            ORDER BY id DESC
-        """, (company_id,))
+        list_filter["salesman_id"] = user_id
 
-    rows = cur.fetchall()
-    cur.close()
+    rows = db.distributors.find(list_filter).sort("_id", -1)
 
     distributors = []
+
     for r in rows:
         distributors.append({
-            "id": r[0],
-            "dealer_code": r[1],
-            "name": r[2],
-            "mobile": r[3],
-            "email": r[4],
-            "pan": r[5],
-            "gst": r[6],
-            "city": r[7],
-            "state": r[8],
-            "address": r[9]
+            "id": str(r.get("_id")),
+            "dealer_code": r.get("dealer_code", ""),
+            "name": r.get("name", ""),
+            "mobile": r.get("mobile", ""),
+            "email": r.get("email", ""),
+            "pan": r.get("pan", ""),
+            "gst": r.get("gst", ""),
+            "city": r.get("city", ""),
+            "state": r.get("state", ""),
+            "address": r.get("address", "")
         })
 
     return render_template(
@@ -4621,17 +4931,20 @@ def edit_distributor(distributor_id):
         edit_distributor=distributor
     )
 
+
 @admin_bp.route("/company-admin/retailers/edit/<retailer_id>", methods=["GET", "POST"])
 def edit_retailer(retailer_id):
+
     if "user_id" not in session or session.get("user_role") != "admin":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
-    cur = mysql.connection.cursor()
 
+    # ================= POST =================
     if request.method == "POST":
+
         dealer_code = request.form.get("dealer_code", "").strip()
         name = request.form.get("name", "").strip()
         mobile = request.form.get("mobile", "").strip()
@@ -4643,77 +4956,88 @@ def edit_retailer(retailer_id):
         address = request.form.get("address", "").strip()
 
         try:
-            cur.execute("""
-                UPDATE retailers
-                SET dealer_code=%s, name=%s, mobile=%s, email=%s, pan=%s, gst=%s,
-                    city=%s, state=%s, address=%s
-                WHERE id=%s AND company_id=%s
-            """, (
-                dealer_code, name, mobile, email, pan, gst,
-                city, state, address,
-                retailer_id, company_id
-            ))
-            mysql.connection.commit()
-            cur.close()
+
+            db.retailers.update_one(
+                {
+                    "_id": oid(retailer_id),
+                    "company_id": company_id
+                },
+                {
+                    "$set": {
+                        "dealer_code": dealer_code,
+                        "name": name,
+                        "mobile": mobile,
+                        "email": email,
+                        "pan": pan,
+                        "gst": gst,
+                        "city": city,
+                        "state": state,
+                        "address": address,
+                        "updated_at": now()
+                    }
+                }
+            )
+
             flash("Retailer updated successfully.", "success")
             return redirect(url_for("admin.company_admin_retailers_page"))
+
         except Exception as e:
-            mysql.connection.rollback()
-            cur.close()
             flash(f"Error updating retailer: {str(e)}", "danger")
             return redirect(url_for("admin.edit_retailer", retailer_id=retailer_id))
 
-    cur.execute("""
-        SELECT id, dealer_code, name, mobile, email, pan, gst, city, state, address
-        FROM retailers
-        WHERE id = %s
-          AND company_id = %s
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-        LIMIT 1
-    """, (retailer_id, company_id))
-    row = cur.fetchone()
+    # ================= GET =================
+    row = db.retailers.find_one({
+        "_id": oid(retailer_id),
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
     if not row:
-        cur.close()
         flash("Retailer not found.", "danger")
         return redirect(url_for("admin.company_admin_retailers_page"))
 
     retailer = {
-        "id": row[0],
-        "dealer_code": row[1] or "",
-        "name": row[2] or "",
-        "mobile": row[3] or "",
-        "email": row[4] or "",
-        "pan": row[5] or "",
-        "gst": row[6] or "",
-        "city": row[7] or "",
-        "state": row[8] or "",
-        "address": row[9] or "",
+        "id": str(row.get("_id")),
+        "dealer_code": row.get("dealer_code", ""),
+        "name": row.get("name", ""),
+        "mobile": row.get("mobile", ""),
+        "email": row.get("email", ""),
+        "pan": row.get("pan", ""),
+        "gst": row.get("gst", ""),
+        "city": row.get("city", ""),
+        "state": row.get("state", ""),
+        "address": row.get("address", "")
     }
 
-    cur.execute("""
-        SELECT id, dealer_code, name, mobile, email, pan, gst, city, state, address
-        FROM retailers
-        WHERE company_id = %s
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-        ORDER BY id DESC
-    """, (company_id,))
-    rows = cur.fetchall()
-    cur.close()
+    rows = db.retailers.find({
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }).sort("_id", -1)
 
     retailers = []
+
     for r in rows:
         retailers.append({
-            "id": r[0],
-            "dealer_code": r[1],
-            "name": r[2],
-            "mobile": r[3],
-            "email": r[4],
-            "pan": r[5],
-            "gst": r[6],
-            "city": r[7],
-            "state": r[8],
-            "address": r[9]
+            "id": str(r.get("_id")),
+            "dealer_code": r.get("dealer_code", ""),
+            "name": r.get("name", ""),
+            "mobile": r.get("mobile", ""),
+            "email": r.get("email", ""),
+            "pan": r.get("pan", ""),
+            "gst": r.get("gst", ""),
+            "city": r.get("city", ""),
+            "state": r.get("state", ""),
+            "address": r.get("address", "")
         })
 
     return render_template(
@@ -4722,18 +5046,20 @@ def edit_retailer(retailer_id):
         edit_retailer=retailer
     )
 
-@admin_bp.route("/company-admin/mechanics/edit/<int:mechanic_id>", methods=["GET", "POST"])
+
+@admin_bp.route("/company-admin/mechanics/edit/<mechanic_id>", methods=["GET", "POST"])
 def edit_mechanic(mechanic_id):
+
     if "user_id" not in session or session.get("user_role") != "admin":
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
+    db = get_db()
     company_id = session.get("company_id")
-    cur = mysql.connection.cursor()
 
-    # ================= POST (UPDATE)
+    # ================= POST =================
     if request.method == "POST":
+
         dealer_code = request.form.get("dealer_code", "").strip()
         name = request.form.get("name", "").strip()
         mobile = request.form.get("mobile", "").strip()
@@ -4745,84 +5071,88 @@ def edit_mechanic(mechanic_id):
         address = request.form.get("address", "").strip()
 
         try:
-            cur.execute("""
-                UPDATE mechanics
-                SET dealer_code=%s, name=%s, mobile=%s, email=%s,
-                    pan=%s, gst=%s, city=%s, state=%s, address=%s
-                WHERE id=%s AND company_id=%s
-            """, (
-                dealer_code, name, mobile, email,
-                pan, gst, city, state, address,
-                mechanic_id, company_id
-            ))
 
-            mysql.connection.commit()
-            cur.close()
+            db.mechanics.update_one(
+                {
+                    "_id": oid(mechanic_id),
+                    "company_id": company_id
+                },
+                {
+                    "$set": {
+                        "dealer_code": dealer_code,
+                        "name": name,
+                        "mobile": mobile,
+                        "email": email,
+                        "pan": pan,
+                        "gst": gst,
+                        "city": city,
+                        "state": state,
+                        "address": address,
+                        "updated_at": now()
+                    }
+                }
+            )
 
             flash("Mechanic updated successfully.", "success")
             return redirect(url_for("admin.company_admin_mechanics_page"))
 
         except Exception as e:
-            mysql.connection.rollback()
-            cur.close()
             flash(f"Error updating mechanic: {str(e)}", "danger")
             return redirect(url_for("admin.edit_mechanic", mechanic_id=mechanic_id))
 
-    # ================= GET (LOAD DATA)
-    cur.execute("""
-        SELECT id, dealer_code, name, mobile, email, pan, gst, city, state, address
-        FROM mechanics
-        WHERE id = %s
-          AND company_id = %s
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-        LIMIT 1
-    """, (mechanic_id, company_id))
-
-    row = cur.fetchone()
+    # ================= GET =================
+    row = db.mechanics.find_one({
+        "_id": oid(mechanic_id),
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    })
 
     if not row:
-        cur.close()
         flash("Mechanic not found.", "danger")
         return redirect(url_for("admin.company_admin_mechanics_page"))
 
     edit_mechanic = {
-        "id": row[0],
-        "dealer_code": row[1] or "",
-        "name": row[2] or "",
-        "mobile": row[3] or "",
-        "email": row[4] or "",
-        "pan": row[5] or "",
-        "gst": row[6] or "",
-        "city": row[7] or "",
-        "state": row[8] or "",
-        "address": row[9] or "",
+        "id": str(row.get("_id")),
+        "dealer_code": row.get("dealer_code", ""),
+        "name": row.get("name", ""),
+        "mobile": row.get("mobile", ""),
+        "email": row.get("email", ""),
+        "pan": row.get("pan", ""),
+        "gst": row.get("gst", ""),
+        "city": row.get("city", ""),
+        "state": row.get("state", ""),
+        "address": row.get("address", "")
     }
 
-    # reload list
-    cur.execute("""
-        SELECT id, dealer_code, name, mobile, email, pan, gst, city, state, address
-        FROM mechanics
-        WHERE company_id = %s
-          AND (is_deleted = 0 OR is_deleted IS NULL)
-        ORDER BY id DESC
-    """, (company_id,))
-
-    rows = cur.fetchall()
-    cur.close()
+    rows = db.mechanics.find({
+        "company_id": company_id,
+        "$or": [
+            {"is_deleted": 0},
+            {"is_deleted": False},
+            {"is_deleted": {"$exists": False}},
+            {"is_deleted": None}
+        ]
+    }).sort("_id", -1)
 
     mechanics = []
+
     for r in rows:
         mechanics.append({
-            "id": r[0],
-            "dealer_code": r[1],
-            "name": r[2],
-            "mobile": r[3],
-            "email": r[4],
-            "pan": r[5],
-            "gst": r[6],
-            "city": r[7],
-            "state": r[8],
-            "address": r[9]
+            "id": str(r.get("_id")),
+            "dealer_code": r.get("dealer_code", ""),
+            "name": r.get("name", ""),
+            "mobile": r.get("mobile", ""),
+            "email": r.get("email", ""),
+            "pan": r.get("pan", ""),
+            "gst": r.get("gst", ""),
+            "city": r.get("city", ""),
+            "state": r.get("state", ""),
+            "address": r.get("address", "")
         })
 
     return render_template(
@@ -4833,6 +5163,7 @@ def edit_mechanic(mechanic_id):
 
 @admin_bp.route("/manual-redeem", methods=["POST"])
 def manual_redeem():
+
     if "user_id" not in session:
         flash("Please login first.", "danger")
         return redirect(url_for("auth.login"))
@@ -4841,8 +5172,11 @@ def manual_redeem():
         flash("Unauthorized access.", "danger")
         return redirect(url_for("auth.login"))
 
-    coupon_code = request.form.get("coupon_code", "").strip()
+    db = get_db()
+
+    coupon_code = request.form.get("coupon_code", "").strip().upper()
     reason = request.form.get("reason", "").strip()
+    company_id = session.get("company_id")
 
     if not coupon_code:
         flash("Coupon code is required.", "danger")
@@ -4852,75 +5186,59 @@ def manual_redeem():
         flash("Reason is required for manual redeem.", "danger")
         return redirect(url_for("admin.general_employee_dashboard"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
-
     try:
-        company_id = session.get("company_id")
-
-        cur.execute("""
-            SELECT id, code, points, company_id, is_redeemed
-            FROM coupons
-            WHERE code = %s AND company_id = %s
-            LIMIT 1
-        """, (coupon_code, company_id))
-        coupon = cur.fetchone()
+        coupon = db.coupons.find_one({
+            "code": coupon_code,
+            "company_id": company_id
+        })
 
         if not coupon:
             flash("Invalid coupon code.", "danger")
             return redirect(url_for("admin.general_employee_dashboard"))
 
-        coupon_id = coupon[0]
-        coupon_code_db = coupon[1]
-        points = coupon[2] if coupon[2] else 0
-        coupon_company_id = coupon[3]
-        is_redeemed = coupon[4]
-
-        if is_redeemed == 1:
+        if int(coupon.get("is_redeemed") or 0) == 1 or coupon.get("status") == "redeemed":
             flash("This coupon is already redeemed.", "warning")
             return redirect(url_for("admin.general_employee_dashboard"))
 
-        cur.execute("""
-            UPDATE coupons
-            SET is_redeemed = 1
-            WHERE id = %s
-        """, (coupon_id,))
+        db.coupons.update_one(
+            {"_id": coupon["_id"]},
+            {
+                "$set": {
+                    "is_redeemed": 1,
+                    "status": "redeemed",
+                    "redeemed_by": session.get("user_id"),
+                    "redeemed_at": now()
+                }
+            }
+        )
 
-        cur.execute("""
-            INSERT INTO dealer_redemptions
-            (coupon_id, coupon_code, redeemed_by, points, manual_reason, is_manual, company_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (
-            coupon_id,
-            coupon_code_db,
-            session["user_id"],
-            points,
-            reason,
-            1,
-            coupon_company_id
-        ))
+        db.dealer_redemptions.insert_one({
+            "dealer_id": coupon.get("dealer_id") or coupon.get("scanned_by"),
+            "coupon_id": str(coupon.get("_id")),
+            "coupon_code": coupon.get("code", ""),
+            "redemption_type": "manual",
+            "part_no": coupon.get("part_no", ""),
+            "product_name": coupon.get("product_name", ""),
+            "coupons_count": 1,
+            "redeemed_points": int(coupon.get("points") or 0),
+            "remarks": reason,
+            "redeemed_by": session.get("user_id"),
+            "company_id": company_id,
+            "is_manual": 1,
+            "created_at": now()
+        })
 
-        mysql.connection.commit()
         flash("Coupon redeemed manually successfully.", "success")
 
     except Exception as e:
-        mysql.connection.rollback()
         flash(f"Error: {str(e)}", "danger")
-
-    finally:
-        cur.close()
 
     return redirect(url_for("admin.general_employee_dashboard"))
 
 
-
-
-
-
-
-
-@admin_bp.route("/redeem-set/<int:coupon_id>", methods=["POST"])
+@admin_bp.route("/redeem-set/<coupon_id>", methods=["POST"])
 def redeem_set(coupon_id):
+
     if "user_id" not in session:
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
@@ -4929,37 +5247,28 @@ def redeem_set(coupon_id):
         flash("Unauthorized access.", "danger")
         return redirect(url_for("auth.login"))
 
+    db = get_db()
+
     remarks = request.form.get("set_reason", "").strip()
+    company_id = session.get("company_id")
 
     if not remarks:
         flash("Set remark is required.", "danger")
         return redirect(url_for("admin.pending_redemptions"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
-    company_id = session.get("company_id")
-
     try:
-        cur.execute("""
-            SELECT id, code, product_name, part_no, points, invoice_no, dealer_id, redemption_status
-            FROM coupons
-            WHERE id = %s AND company_id = %s
-            LIMIT 1
-        """, (coupon_id, company_id))
-        coupon = cur.fetchone()
+        coupon = db.coupons.find_one({
+            "_id": oid(coupon_id),
+            "company_id": company_id
+        })
 
         if not coupon:
             flash("Coupon not found.", "danger")
             return redirect(url_for("admin.pending_redemptions"))
 
-        coupon_id_db = coupon[0]
-        coupon_code = coupon[1]
-        product_name = coupon[2]
-        part_no = coupon[3]
-        points = coupon[4] or 0
-        invoice_no = coupon[5]
-        dealer_id = coupon[6]
-        redemption_status = coupon[7]
+        invoice_no = coupon.get("invoice_no", "")
+        dealer_id = coupon.get("dealer_id") or coupon.get("scanned_by")
+        redemption_status = coupon.get("redemption_status", "pending")
 
         if not invoice_no:
             flash("Invoice number is required.", "danger")
@@ -4969,77 +5278,37 @@ def redeem_set(coupon_id):
             flash("This coupon is already processed.", "warning")
             return redirect(url_for("admin.pending_redemptions"))
 
-        cur.execute("""
-            INSERT INTO dealer_coupon_sets
-            (dealer_id, coupon_id, coupon_code, invoice_no, part_no, product_name, points, set_size, remarks, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (
-            dealer_id,
-            coupon_id_db,
-            coupon_code,
-            invoice_no,
-            part_no,
-            product_name,
-            points,
-            10,
-            remarks,
-            session["user_id"]
-        ))
+        db.dealer_coupon_sets.insert_one({
+            "dealer_id": dealer_id,
+            "coupon_id": str(coupon.get("_id")),
+            "coupon_code": coupon.get("code", ""),
+            "invoice_no": invoice_no,
+            "part_no": coupon.get("part_no", ""),
+            "product_name": coupon.get("product_name", ""),
+            "points": int(coupon.get("points") or 0),
+            "set_size": 10,
+            "remarks": remarks,
+            "created_by": session.get("user_id"),
+            "company_id": company_id,
+            "created_at": now()
+        })
 
-        cur.execute("""
-            UPDATE coupons
-            SET redemption_status = 'set_redeemed'
-            WHERE id = %s
-        """, (coupon_id_db,))
+        db.coupons.update_one(
+            {"_id": coupon["_id"]},
+            {
+                "$set": {
+                    "redemption_status": "set_redeemed",
+                    "updated_at": now()
+                }
+            }
+        )
 
-        mysql.connection.commit()
         flash("Coupon moved to set redemption successfully.", "success")
 
     except Exception as e:
-        mysql.connection.rollback()
         flash(f"Set redeem error: {str(e)}", "danger")
 
-    finally:
-        cur.close()
-
     return redirect(url_for("admin.pending_redemptions"))
-
-from flask import jsonify, request
-
-@admin_bp.route("/api/states", methods=["GET"])
-def api_states():
-    states = [
-        "Andhra Pradesh",
-        "Arunachal Pradesh",
-        "Assam",
-        "Bihar",
-        "Chhattisgarh",
-        "Delhi",
-        "Goa",
-        "Gujarat",
-        "Haryana",
-        "Himachal Pradesh",
-        "Jharkhand",
-        "Karnataka",
-        "Kerala",
-        "Madhya Pradesh",
-        "Maharashtra",
-        "Manipur",
-        "Meghalaya",
-        "Mizoram",
-        "Nagaland",
-        "Odisha",
-        "Punjab",
-        "Rajasthan",
-        "Sikkim",
-        "Tamil Nadu",
-        "Telangana",
-        "Tripura",
-        "Uttar Pradesh",
-        "Uttarakhand",
-        "West Bengal"
-    ]
-    return jsonify({"states": states})
 
 
 @admin_bp.route("/api/cities", methods=["GET"])
@@ -5080,108 +5349,83 @@ def api_cities():
 
     return jsonify({"cities": state_city_map.get(state, [])})
 
-@admin_bp.route("/redeem/material/<int:coupon_id>", methods=["POST"])
+@admin_bp.route("/redeem/material/<coupon_id>", methods=["POST"])
 def redeem_material(coupon_id):
+
     if "user_id" not in session:
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
     try:
         invoice_no = request.form.get("invoice_no", "").strip()
         remarks = request.form.get("remarks", "").strip()
+        company_id = session.get("company_id")
 
         if not invoice_no:
             flash("Invoice number is required.", "danger")
             return redirect(url_for("admin.pending_redemptions"))
 
-        # ✅ Coupon + Dealer fetch
-        cur.execute("""
-            SELECT 
-                c.id,
-                c.code,
-                c.part_no,
-                c.product_name,
-                c.points,
-                c.scanned_by,
-                d.name,
-                d.email
-            FROM coupons c
-            LEFT JOIN distributors d ON c.scanned_by = d.id
-            WHERE c.id = %s
-            LIMIT 1
-        """, (coupon_id,))
-        row = cur.fetchone()
+        coupon = db.coupons.find_one({
+            "_id": oid(coupon_id),
+            "company_id": company_id
+        })
 
-        if not row:
+        if not coupon:
             flash("Coupon not found.", "danger")
             return redirect(url_for("admin.pending_redemptions"))
 
-        coupon_id_db = row[0]
-        coupon_code = row[1]
-        part_no = row[2] or "-"
-        product_name = row[3] or "-"
-        points = row[4] or 0
-        dealer_id = row[5]
-        dealer_name = row[6] or "User"
-        dealer_email = row[7]
+        dealer_id = coupon.get("scanned_by") or coupon.get("dealer_id")
+        dealer_name = "User"
+        dealer_email = ""
 
-        # ❌ Already redeemed check
-        cur.execute("""
-            SELECT id FROM dealer_redemptions
-            WHERE coupon_id = %s
-            LIMIT 1
-        """, (coupon_id_db,))
-        already = cur.fetchone()
+        if dealer_id:
+            dealer = db.distributors.find_one({"_id": oid(dealer_id)})
+            if dealer:
+                dealer_name = dealer.get("name", "User")
+                dealer_email = dealer.get("email", "")
+
+        already = db.dealer_redemptions.find_one({
+            "coupon_id": str(coupon.get("_id"))
+        })
 
         if already:
             flash("Already redeemed.", "warning")
             return redirect(url_for("admin.pending_redemptions"))
 
-        # ✅ Insert redemption
-        cur.execute("""
-            INSERT INTO dealer_redemptions
-            (
-                dealer_id,
-                coupon_id,
-                coupon_code,
-                invoice_no,
-                redemption_type,
-                part_no,
-                product_name,
-                coupons_count,
-                redeemed_points,
-                remarks,
-                redeemed_by
-            )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        """, (
-            dealer_id,
-            coupon_id_db,
-            coupon_code,
-            invoice_no,
-            "material",
-            part_no,
-            product_name,
-            1,
-            points,
-            remarks,
-            session.get("user_id")
-        ))
+        points = int(coupon.get("points") or 0)
+        coupon_code = coupon.get("code", "")
 
-        # ✅ Update coupon
-        cur.execute("""
-            UPDATE coupons
-            SET is_redeemed = 1,
-                status = 'redeemed'
-            WHERE id = %s
-        """, (coupon_id_db,))
+        db.dealer_redemptions.insert_one({
+            "dealer_id": dealer_id,
+            "coupon_id": str(coupon.get("_id")),
+            "coupon_code": coupon_code,
+            "invoice_no": invoice_no,
+            "redemption_type": "material",
+            "part_no": coupon.get("part_no", "-"),
+            "product_name": coupon.get("product_name", "-"),
+            "coupons_count": 1,
+            "redeemed_points": points,
+            "remarks": remarks,
+            "redeemed_by": session.get("user_id"),
+            "company_id": company_id,
+            "created_at": now()
+        })
 
-        mysql.connection.commit()   # 🔥 IMPORTANT
+        db.coupons.update_one(
+            {"_id": coupon["_id"]},
+            {
+                "$set": {
+                    "is_redeemed": 1,
+                    "status": "redeemed",
+                    "invoice_no": invoice_no,
+                    "redeemed_at": now(),
+                    "redeemed_by": session.get("user_id")
+                }
+            }
+        )
 
-        # ✅ EMAIL SEND
         if dealer_email:
             send_redemption_email(
                 to_email=dealer_email,
@@ -5195,86 +5439,84 @@ def redeem_material(coupon_id):
         flash("Coupon redeemed successfully.", "success")
 
     except Exception as e:
-        mysql.connection.rollback()
         flash(f"Error: {str(e)}", "danger")
-
-    finally:
-        cur.close()
 
     return redirect(url_for("admin.pending_redemptions"))
 
-@admin_bp.route("/redeem/cn/<int:coupon_id>", methods=["POST"])
+
+@admin_bp.route("/redeem/cn/<coupon_id>", methods=["POST"])
 def redeem_cn(coupon_id):
+
     if "user_id" not in session:
         return redirect(url_for("auth.login"))
 
-    mysql = current_app.config["MYSQL_INSTANCE"]
-    cur = mysql.connection.cursor()
+    db = get_db()
 
     try:
         remarks = request.form.get("remarks", "").strip()
+        company_id = session.get("company_id")
 
-        cur.execute("""
-            SELECT 
-                c.id, c.code, c.part_no, c.product_name, c.points,
-                c.scanned_by, d.name, d.email
-            FROM coupons c
-            LEFT JOIN distributors d ON c.scanned_by = d.id
-            WHERE c.id = %s
-        """, (coupon_id,))
-        row = cur.fetchone()
+        coupon = db.coupons.find_one({
+            "_id": oid(coupon_id),
+            "company_id": company_id
+        })
 
-        if not row:
+        if not coupon:
             flash("Coupon not found", "danger")
             return redirect(url_for("admin.pending_redemptions"))
 
-        coupon_id_db, coupon_code, part_no, product_name, points, dealer_id, dealer_name, dealer_email = row
+        dealer_id = coupon.get("scanned_by") or coupon.get("dealer_id")
+        dealer_name = "User"
+        dealer_email = ""
 
-        # insert
-        cur.execute("""
-            INSERT INTO dealer_redemptions
-            (dealer_id, coupon_id, coupon_code, redemption_type, part_no, product_name, coupons_count, redeemed_points, remarks, redeemed_by)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        """, (
-            dealer_id,
-            coupon_id_db,
-            coupon_code,
-            "credit_note",
-            part_no,
-            product_name,
-            1,
-            points,
-            remarks,
-            session.get("user_id")
-        ))
+        if dealer_id:
+            dealer = db.distributors.find_one({"_id": oid(dealer_id)})
+            if dealer:
+                dealer_name = dealer.get("name", "User")
+                dealer_email = dealer.get("email", "")
 
-        # update coupon
-        cur.execute("""
-            UPDATE coupons
-            SET is_redeemed = 1,
-                status = 'redeemed'
-            WHERE id = %s
-        """, (coupon_id_db,))
+        points = int(coupon.get("points") or 0)
+        coupon_code = coupon.get("code", "")
 
-        mysql.connection.commit()
+        db.dealer_redemptions.insert_one({
+            "dealer_id": dealer_id,
+            "coupon_id": str(coupon.get("_id")),
+            "coupon_code": coupon_code,
+            "redemption_type": "credit_note",
+            "part_no": coupon.get("part_no", "-"),
+            "product_name": coupon.get("product_name", "-"),
+            "coupons_count": 1,
+            "redeemed_points": points,
+            "remarks": remarks,
+            "redeemed_by": session.get("user_id"),
+            "company_id": company_id,
+            "created_at": now()
+        })
 
-        # EMAIL
+        db.coupons.update_one(
+            {"_id": coupon["_id"]},
+            {
+                "$set": {
+                    "is_redeemed": 1,
+                    "status": "redeemed",
+                    "redeemed_at": now(),
+                    "redeemed_by": session.get("user_id")
+                }
+            }
+        )
+
         if dealer_email:
             send_redemption_email(
-                dealer_email,
-                dealer_name,
-                coupon_code,
-                points,
-                "Credit Note"
+                to_email=dealer_email,
+                dealer_name=dealer_name,
+                coupon_code=coupon_code,
+                points=points,
+                redemption_type="Credit Note"
             )
 
         flash("Credit note redeemed", "success")
 
     except Exception as e:
-        mysql.connection.rollback()
         flash(str(e), "danger")
-
-    finally:
-        cur.close()
 
     return redirect(url_for("admin.pending_redemptions"))
