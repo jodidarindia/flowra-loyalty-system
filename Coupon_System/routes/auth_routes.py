@@ -6,7 +6,7 @@ import io
 from bson.objectid import ObjectId
 from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
-from flask import get_db
+
 #import razorpay
 import os
 import config
@@ -36,6 +36,10 @@ print("RAZORPAY SECRET:", config.RAZORPAY_SECRET)
 
 auth_bp = Blueprint("auth", __name__)
 
+
+def get_db():
+    mongo = current_app.config["MONGO_INSTANCE"]
+    return mongo.cx["flowra_db"]
 
 # ------------------------------
 # Helpers
