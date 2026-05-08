@@ -32,13 +32,7 @@
 
                 <div class="col-md-2">
                     <label class="form-label custom-label">Coupon Count</label>
-                    <input type="number"
-                           name="count"
-                           class="form-control modern-input"
-                           min="1"
-                           max="100"
-                           value="{{ count or 10 }}"
-                           required>
+                    <input type="number" name="count" class="form-control modern-input" min="1" max="100" value="{{ count or 10 }}" required>
                 </div>
 
                 <div class="col-md-2">
@@ -51,32 +45,22 @@
 
                 <div class="col-md-2">
                     <label class="form-label custom-label">Brand Name</label>
-                    <input type="text"
-                           name="brand_name"
-                           class="form-control modern-input"
-                           placeholder="e.g. VOLTAGE"
-                           value="{{ brand_name or '' }}"
-                           required>
+                    <input type="text" name="brand_name" class="form-control modern-input" placeholder="e.g. VOLTAGE" value="{{ brand_name or '' }}" required>
                 </div>
 
                 <div class="col-md-2 d-grid">
-                    <button type="submit" class="btn flowra-btn">
-                        Print Coupon
-                    </button>
+                    <button type="submit" class="btn flowra-btn">Print Coupon</button>
                 </div>
             </form>
         </div>
 
         {% if coupon %}
-        <div class="company-form-card">
+        <div class="company-form-card mb-4">
             <h4 class="mb-3">Coupon Preview</h4>
 
             <div class="coupon-preview-wrap">
                 <div class="real-coupon-label {% if selected_qr_size == '50x50' %}size-50x50{% else %}size-25x50{% endif %}">
-                    
-                    <div class="coupon-left-strip">
-                        {{ brand_name or 'VOLTAGE' }}
-                    </div>
+                    <div class="coupon-left-strip">{{ brand_name or 'VOLTAGE' }}</div>
 
                     <div class="coupon-main-content">
                         <div class="coupon-text-area">
@@ -112,11 +96,56 @@
                             {% endif %}
                         </div>
                     </div>
-
                 </div>
             </div>
         </div>
         {% endif %}
+
+        <div class="company-form-card">
+            <h4 class="mb-3">Print Queue</h4>
+            <p class="text-muted mb-4">Pending jobs will be printed by the Windows USB print agent.</p>
+
+            <div class="table-responsive">
+                <table class="table align-middle company-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Printer</th>
+                            <th>Status</th>
+                            <th>Created At</th>
+                            <th>Printed At</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for job in print_jobs %}
+                        <tr>
+                            <td>#{{ (job._id|string)[-6:] }}</td>
+                            <td>{{ job.printer_name or '-' }}</td>
+                            <td>
+                                {% if job.status == "printed" %}
+                                    <span class="badge bg-success">Printed</span>
+                                {% elif job.status == "failed" %}
+                                    <span class="badge bg-danger">Failed</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">Pending</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ job.created_at or '-' }}</td>
+                            <td>{{ job.printed_at or '-' }}</td>
+                            <td>{{ job.error or '-' }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                No print jobs found.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
     </div>
 </div>
