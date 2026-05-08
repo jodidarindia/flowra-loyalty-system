@@ -5,6 +5,7 @@ from extensions import mail
 from datetime import datetime, timedelta
 from flask_mail import Message
 import os
+from routes.auth_routes import send_company_credentials_email
 import io
 from extensions import mail, csrf
 from werkzeug.utils import secure_filename
@@ -474,7 +475,28 @@ def company_management():
                 "created_at": now()
             })
 
-            flash(f"Company created successfully. Code: {company_code}", "success")
+            try:
+                send_company_credentials_email(
+                    to_email=admin_email,
+                    contact_name=admin_name,
+                    company_name=company_name,
+                    login_email=admin_email,
+                    temp_password=admin_password
+                )
+
+                flash(
+                    f"Company created successfully. Code: {company_code}. Credentials sent to admin email.",
+                    "success"
+                )
+
+            except Exception as mail_error:
+                print("MAIL ERROR:", mail_error)
+
+                flash(
+                    f"Company created successfully. Code: {company_code}. But email sending failed.",
+                    "warning"
+                )
+
             return redirect(url_for("admin.company_management"))
 
         except Exception as e:
