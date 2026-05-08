@@ -437,7 +437,23 @@ def company_management():
         try:
             hashed_password = generate_password_hash(admin_password)
 
+            last_company = db.companies.find_one(
+                {"company_code": {"$regex": "^FLR"}},
+                sort=[("company_code", -1)]
+            )
+
+            if last_company and last_company.get("company_code"):
+                try:
+                    last_number = int(last_company.get("company_code").replace("FLR", ""))
+                except:
+                    last_number = db.companies.count_documents({})
+            else:
+                last_number = db.companies.count_documents({})
+
+            company_code = f"FLR{last_number + 1:03d}"
+
             company_result = db.companies.insert_one({
+                "company_code": company_code,
                 "name": company_name,
                 "status": status,
                 "is_deleted": 0,
@@ -458,7 +474,7 @@ def company_management():
                 "created_at": now()
             })
 
-            flash("Company created successfully.", "success")
+            flash(f"Company created successfully. Code: {company_code}", "success")
             return redirect(url_for("admin.company_management"))
 
         except Exception as e:
@@ -492,6 +508,7 @@ def company_management():
 
         companies.append({
             "id": company_id,
+            "company_code": company.get("company_code", "FLR---"),
             "name": company.get("name", ""),
             "status": company.get("status", "Active"),
             "admin": admin.get("name", "N/A") if admin else "N/A"
