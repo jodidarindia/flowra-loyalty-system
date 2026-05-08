@@ -1325,7 +1325,6 @@ def coupon_generator():
         return redirect(url_for("auth.login"))
 
     db = get_db()
-
     company_id = session.get("company_id")
 
     search_text = ""
@@ -1333,9 +1332,6 @@ def coupon_generator():
     brand_name = ""
     count = 10
 
-    # -----------------------------
-    # PART NUMBER DROPDOWN
-    # -----------------------------
     pipeline = [
         {
             "$match": {
@@ -1356,52 +1352,32 @@ def coupon_generator():
                 "product_name": {"$first": "$product_name"}
             }
         },
-        {
-            "$sort": {
-                "_id": 1
-            }
-        }
+        {"$sort": {"_id": 1}}
     ]
 
     parts = []
 
     for item in db.coupons.aggregate(pipeline):
-
         parts.append((
             item.get("_id", ""),
             item.get("product_name", "")
         ))
 
-    # -----------------------------
-    # FORM SUBMIT
-    # -----------------------------
     if request.method == "POST":
 
         search_text = request.form.get("search_text", "").strip()
-
-        selected_qr_size = request.form.get(
-            "qr_size",
-            "25x50"
-        ).strip()
-
-        brand_name = request.form.get(
-            "brand_name",
-            ""
-        ).strip()
+        selected_qr_size = request.form.get("qr_size", "25x50").strip()
+        brand_name = request.form.get("brand_name", "").strip()
 
         try:
             count = int(request.form.get("count", 10) or 10)
-
             if count <= 0:
                 count = 1
-
         except:
             count = 1
 
         if not search_text:
-
             flash("Please select part number.", "danger")
-
             return render_template(
                 "coupon_generator.html",
                 parts=parts,
@@ -1410,14 +1386,10 @@ def coupon_generator():
                 count=count
             )
 
-        # -----------------------------
-        # FETCH PRODUCT
-        # -----------------------------
         product = db.coupons.find_one(
             {
                 "company_id": company_id,
                 "part_no": search_text,
-
                 "$or": [
                     {"is_deleted": 0},
                     {"is_deleted": False},
@@ -1425,14 +1397,11 @@ def coupon_generator():
                     {"is_deleted": None}
                 ]
             },
-
             sort=[("_id", -1)]
         )
 
         if not product:
-
             flash("No product found.", "danger")
-
             return render_template(
                 "coupon_generator.html",
                 parts=parts,
@@ -1452,106 +1421,68 @@ def coupon_generator():
         zpl_batch = ""
 
         try:
-
             generated_count = 0
 
             for _ in range(count):
 
-                # -----------------------------
-                # UNIQUE CODE
-                # -----------------------------
                 code = generate_code(16)
 
                 while db.coupons.find_one({"code": code}):
                     code = generate_code(16)
 
-                # -----------------------------
-                # QR GENERATE
-                # -----------------------------
                 qr_data = request.host_url.rstrip("/") + f"/scan/{code}"
-
                 filename = f"{code}.png"
-
                 qr_path = generate_qr(qr_data, filename)
 
-                # -----------------------------
-                # SAVE COUPON
-                # -----------------------------
                 db.coupons.insert_one({
-
                     "code": code,
-
                     "product_name": product_name,
                     "product_type": product_type,
-
                     "part_no": part_no,
-
                     "mrp": mrp,
                     "dlp": dlp,
-
                     "pack_size": pack_size,
-
                     "points": points,
-
                     "qr_size": selected_qr_size,
-
                     "qr_image": qr_path.replace("\\", "/"),
-
                     "company_id": company_id,
-
                     "created_by": session.get("user_id"),
-
                     "status": "unused",
-
                     "is_deleted": 0,
-
                     "created_at": now()
                 })
 
-                # -----------------------------
-                # ZPL BUILD
-                # -----------------------------
                 zpl_batch += build_coupon_zpl(
-
                     part_no=part_no,
-
                     mrp=mrp,
-
                     pack_size=pack_size,
-
                     points=points,
-
                     code=code,
-
                     brand_name=brand_name,
-
                     qr_size=selected_qr_size
                 )
 
                 generated_count += 1
 
-            # -----------------------------
-            # PRINT
-            # -----------------------------
-            send_raw_to_usb_printer(zpl_batch)
+            db.print_jobs.insert_one({
+                "company_id": company_id,
+                "printer_name": "TSC TE244",
+                "raw_data": zpl_batch,
+                "status": "pending",
+                "created_by": session.get("user_id"),
+                "created_at": now()
+            })
 
             flash(
-                f"{generated_count} coupons generated & printed!",
+                f"{generated_count} coupons generated & sent to print queue!",
                 "success"
             )
 
         except Exception as e:
-
-            flash(
-                f"Error: {str(e)}",
-                "danger"
-            )
+            flash(f"Error: {str(e)}", "danger")
 
         return redirect(url_for("admin.coupon_generator"))
 
-    # -----------------------------
-    # PAGE LOAD
-    # -----------------------------
     return render_template(
         "coupon_generator.html",
         parts=parts,
