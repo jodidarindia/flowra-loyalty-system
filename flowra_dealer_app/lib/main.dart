@@ -80,7 +80,7 @@ class MyHttpOverrides extends HttpOverrides {
 }
 
 class ApiService {
-  static const String baseUrl = "https://192.168.1.13:5000";
+  static const String baseUrl = "https://loyalty.flowralive.in";
 
   static Future<Map<String, String>> _authHeaders({bool json = false}) async {
     final prefs = await SharedPreferences.getInstance();
