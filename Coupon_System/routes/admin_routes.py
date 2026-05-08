@@ -5269,40 +5269,35 @@ def redeem_set(coupon_id):
     return redirect(url_for("admin.pending_redemptions"))
 
 
+from flask import jsonify, request
+
+@admin_bp.route("/api/states", methods=["GET"])
+def api_states():
+    states = [
+        "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar",
+        "Chhattisgarh", "Delhi", "Goa", "Gujarat", "Haryana",
+        "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala",
+        "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya",
+        "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan",
+        "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
+        "Uttar Pradesh", "Uttarakhand", "West Bengal"
+    ]
+    return jsonify({"states": states})
+
+
 @admin_bp.route("/api/cities", methods=["GET"])
 def api_cities():
     state = request.args.get("state", "").strip()
 
     state_city_map = {
-        "Andhra Pradesh": ["Visakhapatnam", "Vijayawada", "Guntur", "Nellore"],
-        "Arunachal Pradesh": ["Itanagar", "Naharlagun", "Pasighat"],
-        "Assam": ["Guwahati", "Silchar", "Dibrugarh"],
-        "Bihar": ["Patna", "Gaya", "Muzaffarpur"],
         "Chhattisgarh": ["Raipur", "Bhilai", "Durg", "Bilaspur", "Korba"],
-        "Delhi": ["New Delhi", "North Delhi", "South Delhi", "East Delhi", "West Delhi"],
-        "Goa": ["Panaji", "Margao", "Vasco da Gama"],
-        "Gujarat": ["Ahmedabad", "Surat", "Vadodara", "Rajkot"],
-        "Haryana": ["Gurugram", "Faridabad", "Panipat"],
-        "Himachal Pradesh": ["Shimla", "Mandi", "Solan"],
-        "Jharkhand": ["Ranchi", "Jamshedpur", "Dhanbad"],
-        "Karnataka": ["Bengaluru", "Mysuru", "Mangaluru"],
-        "Kerala": ["Thiruvananthapuram", "Kochi", "Kozhikode"],
         "Madhya Pradesh": ["Bhopal", "Indore", "Jabalpur", "Gwalior"],
-        "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Nashik", "Aurangabad"],
-        "Manipur": ["Imphal", "Thoubal"],
-        "Meghalaya": ["Shillong", "Tura"],
-        "Mizoram": ["Aizawl", "Lunglei"],
-        "Nagaland": ["Kohima", "Dimapur"],
-        "Odisha": ["Bhubaneswar", "Cuttack", "Rourkela"],
-        "Punjab": ["Ludhiana", "Amritsar", "Jalandhar"],
+        "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Nashik"],
+        "Delhi": ["New Delhi", "North Delhi", "South Delhi", "East Delhi", "West Delhi"],
+        "Gujarat": ["Ahmedabad", "Surat", "Vadodara", "Rajkot"],
         "Rajasthan": ["Jaipur", "Jodhpur", "Udaipur", "Kota"],
-        "Sikkim": ["Gangtok", "Namchi"],
-        "Tamil Nadu": ["Chennai", "Coimbatore", "Madurai", "Salem"],
-        "Telangana": ["Hyderabad", "Warangal", "Karimnagar"],
-        "Tripura": ["Agartala", "Udaipur"],
-        "Uttar Pradesh": ["Lucknow", "Kanpur", "Varanasi", "Agra", "Prayagraj"],
-        "Uttarakhand": ["Dehradun", "Haridwar", "Haldwani"],
-        "West Bengal": ["Kolkata", "Howrah", "Siliguri", "Asansol"]
+        "Uttar Pradesh": ["Lucknow", "Kanpur", "Noida", "Varanasi"],
+        "West Bengal": ["Kolkata", "Howrah", "Durgapur"],
     }
 
     return jsonify({"cities": state_city_map.get(state, [])})
