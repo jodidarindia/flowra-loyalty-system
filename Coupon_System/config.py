@@ -32,5 +32,5 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 # ------------------------------
 # Mail
 # ------------------------------
-MAIL_USERNAME = os.getenv("MAIL_USERNAME")
-MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
+MAIL_USERNAME = os.getenv("pmadhav550@gmail.com")
+MAIL_PASSWORD = os.getenv("noqiobasamvenlul")
