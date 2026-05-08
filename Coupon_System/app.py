@@ -1,6 +1,6 @@
 from flask import Flask, redirect, url_for
 from datetime import timedelta
-from flask_mysqldb import MySQL
+
 from flask_pymongo import PyMongo
 from dotenv import load_dotenv
 
@@ -22,7 +22,8 @@ app.config["SECRET_KEY"] = config.SECRET_KEY
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=30)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = False
+app.config["SESSION_COOKIE_SECURE"] = True
+app.config["WTF_CSRF_SSL_STRICT"] = False
 
 # ------------------------------
 # Mail config
@@ -34,16 +35,7 @@ app.config["MAIL_USERNAME"] = config.MAIL_USERNAME
 app.config["MAIL_PASSWORD"] = config.MAIL_PASSWORD
 app.config["MAIL_DEFAULT_SENDER"] = config.MAIL_USERNAME
 
-# ------------------------------
-# MySQL config
-# ------------------------------
-app.config["MYSQL_HOST"] = config.MYSQL_HOST
-app.config["MYSQL_USER"] = config.MYSQL_USER
-app.config["MYSQL_PASSWORD"] = config.MYSQL_PASSWORD
-app.config["MYSQL_DB"] = config.MYSQL_DB
 
-mysql = MySQL(app)
-app.config["MYSQL_INSTANCE"] = mysql
 
 # ------------------------------
 # MongoDB config
@@ -73,22 +65,8 @@ app.register_blueprint(admin_bp)
 def home():
     return redirect(url_for("auth.login"))
 
-# ------------------------------
-# Mongo test route
-# ------------------------------
-@app.route("/mongo-test")
-def mongo_test():
 
-    mongo = app.config["MONGO_INSTANCE"]
 
-    db = mongo.cx["flowra_db"]
-
-    db.test.insert_one({
-        "name": "FLOWRA",
-        "status": "connected"
-    })
-
-    return "MongoDB Connected Successfully"
 
 # ------------------------------
 # Run app
@@ -98,5 +76,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=5000,
         debug=True,
-        ssl_context=("192.168.1.13+2.pem", "192.168.1.13+2-key.pem")
+        
     )
