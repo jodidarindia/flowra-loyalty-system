@@ -1356,15 +1356,10 @@ def coupon_generator():
     ]
 
     parts = []
-
     for item in db.coupons.aggregate(pipeline):
-        parts.append((
-            item.get("_id", ""),
-            item.get("product_name", "")
-        ))
+        parts.append((item.get("_id", ""), item.get("product_name", "")))
 
     if request.method == "POST":
-
         search_text = request.form.get("search_text", "").strip()
         selected_qr_size = request.form.get("qr_size", "25x50").strip()
         brand_name = request.form.get("brand_name", "").strip()
@@ -1378,13 +1373,7 @@ def coupon_generator():
 
         if not search_text:
             flash("Please select part number.", "danger")
-            return render_template(
-                "coupon_generator.html",
-                parts=parts,
-                brand_name=brand_name,
-                selected_qr_size=selected_qr_size,
-                count=count
-            )
+            return redirect(url_for("admin.coupon_generator"))
 
         product = db.coupons.find_one(
             {
@@ -1402,13 +1391,7 @@ def coupon_generator():
 
         if not product:
             flash("No product found.", "danger")
-            return render_template(
-                "coupon_generator.html",
-                parts=parts,
-                brand_name=brand_name,
-                selected_qr_size=selected_qr_size,
-                count=count
-            )
+            return redirect(url_for("admin.coupon_generator"))
 
         part_no = product.get("part_no", "")
         product_name = product.get("product_name", "")
@@ -1424,7 +1407,6 @@ def coupon_generator():
             generated_count = 0
 
             for _ in range(count):
-
                 code = generate_code(16)
 
                 while db.coupons.find_one({"code": code}):
@@ -1473,22 +1455,28 @@ def coupon_generator():
                 "created_at": now()
             })
 
-            flash(
-                f"{generated_count} coupons generated & sent to print queue!",
-                "success"
-            )
+            flash(f"{generated_count} coupons generated & sent to print queue!", "success")
 
         except Exception as e:
             flash(f"Error: {str(e)}", "danger")
 
         return redirect(url_for("admin.coupon_generator"))
 
+    print_jobs = list(
+        db.print_jobs.find({
+            "company_id": company_id
+        }).sort("_id", -1).limit(20)
+    )
+
     return render_template(
         "coupon_generator.html",
         parts=parts,
         brand_name=brand_name,
         selected_qr_size=selected_qr_size,
-        count=count
+        count=count,
+        search_text=search_text,
+        coupon=None,
+        print_jobs=print_jobs
     )
 
 
