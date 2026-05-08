@@ -37,6 +37,7 @@
                     <p class="mb-4">Set up a new branded application with admin details.</p>
 
                     <form method="POST" action="{{ url_for('admin.company_management') }}" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="mb-3">
                             <label class="form-label custom-label">Company Name</label>
                             <input type="text" name="company_name" class="form-control modern-input" placeholder="Enter company name" required>
@@ -111,6 +112,7 @@
                                             <a href="{{ url_for('admin.edit_company', company_id=company.id) }}" class="btn btn-sm btn-edit">Edit</a>
 
                                             <form method="POST" action="{{ url_for('admin.delete_company', company_id=company.id) }}" style="display:inline;">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                 <button type="submit" class="btn btn-sm btn-delete"
                                                     onclick="return confirm('Are you sure you want to remove this company from the list?')">
                                                     Delete
