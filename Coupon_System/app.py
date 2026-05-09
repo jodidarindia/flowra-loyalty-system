@@ -8,7 +8,7 @@ import config
 
 from routes.auth_routes import auth_bp
 from routes.admin_routes import admin_bp
-from extensions import mail, csrf, oauth
+from extensions import  csrf, oauth
 
 load_dotenv()
 
@@ -25,18 +25,6 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = True
 app.config["WTF_CSRF_SSL_STRICT"] = False
 
-# ------------------------------
-# Mail config
-# ------------------------------
-app.config["MAIL_SERVER"] = "smtp.gmail.com"
-app.config["MAIL_PORT"] = 587
-app.config["MAIL_USE_TLS"] = True
-app.config["MAIL_USERNAME"] = config.MAIL_USERNAME
-app.config["MAIL_PASSWORD"] = config.MAIL_PASSWORD
-app.config["MAIL_DEFAULT_SENDER"] = config.MAIL_USERNAME
-app.config["MAIL_TIMEOUT"] = 10
-
-
 
 # ------------------------------
 # MongoDB config
@@ -49,7 +37,7 @@ app.config["MONGO_INSTANCE"] = mongo
 # ------------------------------
 # Extensions
 # ------------------------------
-mail.init_app(app)
+
 csrf.init_app(app)
 oauth.init_app(app)
 
