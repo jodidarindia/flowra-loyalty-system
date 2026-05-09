@@ -1,12 +1,14 @@
 import code
 import time
 from bson import ObjectId
-from extensions import mail
+import resend
+
 from datetime import datetime, timedelta
-from flask_mail import Message
+
 import os
-from routes.auth_routes import send_company_credentials_email
+
 import io
+from utils.email_service import send_company_credentials, send_redemption_email
 from extensions import mail, csrf
 from werkzeug.utils import secure_filename
 import uuid
@@ -15,6 +17,7 @@ from flask import Blueprint, app, render_template, session, redirect, url_for, f
 from werkzeug.security import generate_password_hash
 from utils.qr_generator import generate_qr
 import random
+
 import string
 try:
     import win32print
@@ -31,6 +34,31 @@ def generate_code(length=16):
 admin_bp = Blueprint("admin", __name__)
 
 print("admin_routes imported")
+
+def send_company_credentials(to_email, contact_name, company_name, login_email, temp_password):
+    params = {
+        "from": "FLOWRA <noreply@flowralive.in>",
+        "to": [to_email],
+        "subject": "Your FLOWRA Company Admin Account",
+        "html": f"""
+        <h2>Welcome to FLOWRA</h2>
+        <p>Hello {contact_name},</p>
+        <p>Your company account has been created successfully.</p>
+
+        <p><b>Company:</b> {company_name}</p>
+        <p><b>Login Email:</b> {login_email}</p>
+        <p><b>Password:</b> {temp_password}</p>
+
+        <p>
+            <a href="https://loyalty.flowralive.in/login">
+                Login to FLOWRA
+            </a>
+        </p>
+        """
+    }
+
+    return resend.Emails.send(params)
+
 
 
 PRINTER_NAME = "TSC TE244"
@@ -274,26 +302,27 @@ def build_coupon_zpl(part_no, mrp, pack_size, points, code, brand_name, qr_size=
 
 
 def send_redemption_email(to_email, dealer_name, coupon_code, points, redemption_type, invoice_no=""):
-    msg = Message(
-        subject="Coupon Redeemed Successfully",
-        recipients=[to_email]
-    )
+    params = {
+        "from": "FLOWRA <noreply@flowralive.in>",
+        "to": [to_email],
+        "subject": "Coupon Redeemed Successfully",
+        "html": f"""
+        <h2>Coupon Redeemed Successfully</h2>
+        <p>Hello {dealer_name},</p>
 
-    msg.body = f"""
-Hello {dealer_name},
+        <p>Your coupon has been redeemed successfully.</p>
 
-Your coupon has been redeemed successfully.
+        <p><b>Coupon Code:</b> {coupon_code}</p>
+        <p><b>Points:</b> {points}</p>
+        <p><b>Type:</b> {redemption_type}</p>
+        <p><b>Invoice No:</b> {invoice_no if invoice_no else "N/A"}</p>
 
-Details:
-Coupon Code : {coupon_code}
-Points      : {points}
-Type        : {redemption_type}
-Invoice No  : {invoice_no if invoice_no else 'N/A'}
+        <br>
+        <p>Thank you,<br>FLOWRA Team</p>
+        """
+    }
 
-Thank you,
-FLOWRA Team
-"""
-    mail.send(msg)
+    return resend.Emails.send(params)
 
 def _check_company_admin():
     if "user_id" not in session or session.get("user_role") != "admin":
@@ -476,7 +505,7 @@ def company_management():
             })
 
             try:
-                send_company_credentials_email(
+                send_company_credentials(
                     to_email=admin_email,
                     contact_name=admin_name,
                     company_name=company_name,

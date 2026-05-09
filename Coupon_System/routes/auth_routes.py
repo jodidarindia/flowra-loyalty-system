@@ -1,9 +1,11 @@
+from utils.email_service import send_company_credentials, send_redemption_email
 import secrets
 import random
 import string
 import csv
 import io
 from bson.objectid import ObjectId
+
 from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 
@@ -24,12 +26,8 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
-from flask_mail import Message
-from extensions import mail
 
-# razorpay_client = razorpay.Client(
-#     auth=(config.RAZORPAY_KEY, config.RAZORPAY_SECRET)
-# )
+
 
 print("RAZORPAY KEY:", config.RAZORPAY_KEY)
 print("RAZORPAY SECRET:", config.RAZORPAY_SECRET)
@@ -50,6 +48,17 @@ def table_columns(table_name):
     isliye compatibility ke liye empty set return kar rahe hain.
     """
     return set()
+
+
+def send_company_credentials_email(to_email, contact_name, company_name, login_email, temp_password):
+    return send_company_credentials(
+        to_email=to_email,
+        contact_name=contact_name,
+        company_name=company_name,
+        login_email=login_email,
+        temp_password=temp_password
+    )
+
 
 def oid(value):
     try:
@@ -172,27 +181,7 @@ def is_subscription_active(user_id):
     return bool(row)
 
 
-def send_company_credentials_email(to_email, contact_name, company_name, login_email, temp_password):
-    msg = Message(
-        subject="FLOWRA Company Admin Credentials",
-        recipients=[to_email]
-    )
 
-    msg.body = f"""
-Hello {contact_name},
-
-Your company onboarding has been completed successfully.
-
-Company Name: {company_name}
-Login Email : {login_email}
-Password    : {temp_password}
-
-Please login to FLOWRA and change your password after first login.
-
-Thank you,
-FLOWRA Team
-"""
-    mail.send(msg)
 
 
 # ------------------------------
@@ -1082,29 +1071,13 @@ def send_credentials(enquiry_id):
 
     try:
 
-        from flask_mail import Message
-        from app import mail
-
-        msg = Message(
-            "Your FLOWRA Admin Account",
-            recipients=[email]
+        send_company_credentials(
+            to_email=email,
+            contact_name=name,
+            company_name=company_name,
+            login_email=email,
+            temp_password=password
         )
-
-        msg.body = f"""
-Hello {name},
-
-Your admin account is ready.
-
-Company: {company_name}
-Email: {email}
-Password: {password}
-
-Login: http://127.0.0.1:5000/login
-
-- FLOWRA
-"""
-
-        mail.send(msg)
 
     except Exception as e:
         print("MAIL ERROR:", e)
@@ -1112,6 +1085,11 @@ Login: http://127.0.0.1:5000/login
     flash("Admin created & credentials sent!", "success")
 
     return redirect(url_for("auth.super_admin_dispatch"))
+
+
+
+
+  
 
 
 @auth_bp.route("/mark-as-paid/<enquiry_id>", methods=["POST"])
