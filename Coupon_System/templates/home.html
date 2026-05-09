@@ -1605,106 +1605,139 @@ wallet systems, and real-time analytics from one powerful platform.
     </section>
 
     <section class="pricing-section" id="pricing">
-        <div class="container text-center">
-            <div class="reveal-up">
-                <span class="section-badge">Pricing Plans</span>
-                <h2 class="section-title">Simple pricing for every stage</h2>
-                <p class="section-subtitle">
-                    Choose the plan that fits your business. Start small, scale fast, and manage everything through FLOWRA.
-                </p>
-            </div>
+    <div class="container text-center">
+        <div class="reveal-up">
+            <span class="section-badge">Enterprise Pricing</span>
 
-            <div class="pricing-toggle-wrap reveal-up">
-                <div class="pricing-toggle">
-                    <button type="button" id="monthlyBtn">Monthly</button>
-                    <button type="button" id="yearlyBtn" class="active">Annual <span class="save-tag">Save 17%</span></button>
-                </div>
-            </div>
+            <h2 class="section-title">
+                Powerful business software built for scale
+            </h2>
 
-            <div class="row g-4 justify-content-center">
-                <div class="col-md-6 col-lg-4 reveal-up">
-                    <div class="pricing-card text-start">
-                        <h4>Starter</h4>
-                        <p class="plan-desc">Perfect for small businesses getting started.</p>
-                        <div class="price-line">
-                            <span class="currency">₹</span>
-                            <span class="amount" id="starterAmount">833</span>
-                            <span class="per" id="starterPer">/month</span>
-                        </div>
-                        <div class="billed-line" id="starterBill">Billed ₹9,990/year</div>
+            <p class="section-subtitle">
+                FLOWRA is designed for businesses that need a complete loyalty,
+                coupon, QR redemption, dealer management, and analytics ecosystem.
+            </p>
+        </div>
 
-                        <a id="starterBtn" href="{{ url_for('auth.subscription') }}?plan=starter&cycle=yearly" class="pricing-btn-dark">
-                            Get Started
-                        </a>
+        <div class="row justify-content-center mt-4">
+            <div class="col-lg-5 col-md-8 reveal-up">
 
-                        <ul class="pricing-features">
-                            <li><i class="fa-solid fa-check"></i><span>Dashboard & Overview</span></li>
-                            <li><i class="fa-solid fa-check"></i><span>Task & workflow tracking</span></li>
-                            <li><i class="fa-solid fa-check"></i><span>Coupon and loyalty basics</span></li>
-                            <li><i class="fa-solid fa-check"></i><span>Setup & configuration</span></li>
-                        </ul>
+                <div class="pricing-card popular text-start">
 
-                        <div class="pricing-foot">Up to 1 company, 2 employees</div>
+                    <div class="popular-badge">
+                        Complete Solution
                     </div>
-                </div>
 
-                <div class="col-md-6 col-lg-4 reveal-up">
-                    <div class="pricing-card popular text-start">
-                        <div class="popular-badge">Most Popular</div>
-                        <h4>Professional</h4>
-                        <p class="plan-desc">For growing businesses needing deeper insights.</p>
-                        <div class="price-line">
-                            <span class="currency">₹</span>
-                            <span class="amount" id="proAmount">2083</span>
-                            <span class="per" id="proPer">/month</span>
-                        </div>
-                        <div class="billed-line" id="proBill">Billed ₹24,990/year</div>
+                    <h4>FLOWRA Enterprise Suite</h4>
 
-                        <a id="proBtn" href="{{ url_for('auth.subscription') }}?plan=professional&cycle=yearly" class="pricing-btn-blue">
-                            Get Started
-                        </a>
+                    <p class="plan-desc">
+                        One complete platform for loyalty management,
+                        QR coupon workflows, dealer engagement,
+                        redemption tracking, analytics, and business automation.
+                    </p>
 
-                        <ul class="pricing-features">
-                            <li><i class="fa-solid fa-check"></i><span>Everything in Starter</span></li>
-                            <li><i class="fa-solid fa-check"></i><span>Customer CRM & outstanding view</span></li>
-                            <li><i class="fa-solid fa-check"></i><span>Inventory and movement analytics</span></li>
-                            <li><i class="fa-solid fa-check"></i><span>Multi-company support</span></li>
-                            <li><i class="fa-solid fa-check"></i><span>Excel & PDF exports</span></li>
-                        </ul>
-
-                        <div class="pricing-foot">Up to 3 companies, 5 employees</div>
+                    <div class="price-line">
+                        <span class="currency">₹</span>
+                        <span class="amount">1,50,000</span>
                     </div>
-                </div>
 
-                <div class="col-md-6 col-lg-4 reveal-up">
-                    <div class="pricing-card text-start">
-                        <h4>Enterprise</h4>
-                        <p class="plan-desc">Full suite with advanced controls and premium support.</p>
-                        <div class="price-line">
-                            <span class="currency">₹</span>
-                            <span class="amount" id="enterpriseAmount">3166</span>
-                            <span class="per" id="enterprisePer">/month</span>
-                        </div>
-                        <div class="billed-line" id="enterpriseBill">Billed ₹37,990/year</div>
-
-                        <a id="enterpriseBtn" href="{{ url_for('auth.subscription') }}?plan=enterprise&cycle=yearly" class="pricing-btn-dark">
-                            Get Started
-                        </a>
-
-                        <ul class="pricing-features">
-                            <li><i class="fa-solid fa-check"></i><span>Everything in Professional</span></li>
-                            <li><i class="fa-solid fa-check"></i><span>AI-powered reports</span></li>
-                            <li><i class="fa-solid fa-check"></i><span>Advanced BI analytics</span></li>
-                            <li><i class="fa-solid fa-check"></i><span>Multi-company support (10)</span></li>
-                            <li><i class="fa-solid fa-check"></i><span>Priority support & training</span></li>
-                        </ul>
-
-                        <div class="pricing-foot">Up to 10 companies, 20 employees</div>
+                    <div class="billed-line">
+                        One-Time Software License Fee
                     </div>
+
+                    <div style="
+                        margin-top: 22px;
+                        margin-bottom: 22px;
+                        padding: 18px;
+                        border-radius: 18px;
+                        background: rgba(37,99,235,0.06);
+                        border: 1px solid rgba(37,99,235,0.12);
+                    ">
+                        <h6 style="
+                            font-weight:900;
+                            margin-bottom:8px;
+                            color:#111827;
+                        ">
+                            Monthly Maintenance & Hosting
+                        </h6>
+
+                        <div style="
+                            font-size:2rem;
+                            font-weight:900;
+                            color:#2563eb;
+                        ">
+                            ₹3,000/month
+                        </div>
+
+                        <div style="
+                            color:#64748b;
+                            margin-top:6px;
+                            font-size:0.92rem;
+                        ">
+                            Includes cloud hosting, maintenance,
+                            support, updates, and monitoring.
+                        </div>
+                    </div>
+
+                    <a href="{{ url_for('auth.contact') }}"
+                       class="pricing-btn-blue">
+                        Contact Sales
+                    </a>
+
+                    <ul class="pricing-features">
+
+                        <li>
+                            <i class="fa-solid fa-check"></i>
+                            <span>Complete Loyalty & Coupon Management System</span>
+                        </li>
+
+                        <li>
+                            <i class="fa-solid fa-check"></i>
+                            <span>QR Coupon Generation & Redemption</span>
+                        </li>
+
+                        <li>
+                            <i class="fa-solid fa-check"></i>
+                            <span>Dealer & Employee Management</span>
+                        </li>
+
+                        <li>
+                            <i class="fa-solid fa-check"></i>
+                            <span>Wallet & Reward Point System</span>
+                        </li>
+
+                        <li>
+                            <i class="fa-solid fa-check"></i>
+                            <span>Analytics Dashboard & Reports</span>
+                        </li>
+
+                        <li>
+                            <i class="fa-solid fa-check"></i>
+                            <span>Thermal Printer Integration</span>
+                        </li>
+
+                        <li>
+                            <i class="fa-solid fa-check"></i>
+                            <span>Cloud Deployment & Setup</span>
+                        </li>
+
+                        <li>
+                            <i class="fa-solid fa-check"></i>
+                            <span>Initial Training & Onboarding</span>
+                        </li>
+
+                    </ul>
+
+                    <div class="pricing-foot">
+                        Custom enterprise integrations available on request
+                    </div>
+
                 </div>
+
             </div>
         </div>
-    </section>
+    </div>
+</section>
 
     <section class="security-section" id="security">
         <div class="container">
@@ -1873,69 +1906,8 @@ wallet systems, and real-time analytics from one powerful platform.
 </div>
 
 <script>
-    const monthlyBtn = document.getElementById("monthlyBtn");
-    const yearlyBtn = document.getElementById("yearlyBtn");
-
-    const starterAmount = document.getElementById("starterAmount");
-    const starterPer = document.getElementById("starterPer");
-    const starterBill = document.getElementById("starterBill");
-    const starterBtn = document.getElementById("starterBtn");
-
-    const proAmount = document.getElementById("proAmount");
-    const proPer = document.getElementById("proPer");
-    const proBill = document.getElementById("proBill");
-    const proBtn = document.getElementById("proBtn");
-
-    const enterpriseAmount = document.getElementById("enterpriseAmount");
-    const enterprisePer = document.getElementById("enterprisePer");
-    const enterpriseBill = document.getElementById("enterpriseBill");
-    const enterpriseBtn = document.getElementById("enterpriseBtn");
-
-    function setMonthly() {
-        monthlyBtn.classList.add("active");
-        yearlyBtn.classList.remove("active");
-
-        starterAmount.textContent = "999";
-        starterPer.textContent = "/month";
-        starterBill.textContent = "Billed monthly";
-        starterBtn.href = "{{ url_for('auth.subscription') }}?plan=starter&cycle=monthly";
-
-        proAmount.textContent = "2499";
-        proPer.textContent = "/month";
-        proBill.textContent = "Billed monthly";
-        proBtn.href = "{{ url_for('auth.subscription') }}?plan=professional&cycle=monthly";
-
-        enterpriseAmount.textContent = "3799";
-        enterprisePer.textContent = "/month";
-        enterpriseBill.textContent = "Billed monthly";
-        enterpriseBtn.href = "{{ url_for('auth.subscription') }}?plan=enterprise&cycle=monthly";
-    }
-
-    function setYearly() {
-        yearlyBtn.classList.add("active");
-        monthlyBtn.classList.remove("active");
-
-        starterAmount.textContent = "833";
-        starterPer.textContent = "/month";
-        starterBill.textContent = "Billed ₹9,990/year";
-        starterBtn.href = "{{ url_for('auth.subscription') }}?plan=starter&cycle=yearly";
-
-        proAmount.textContent = "2083";
-        proPer.textContent = "/month";
-        proBill.textContent = "Billed ₹24,990/year";
-        proBtn.href = "{{ url_for('auth.subscription') }}?plan=professional&cycle=yearly";
-
-        enterpriseAmount.textContent = "3166";
-        enterprisePer.textContent = "/month";
-        enterpriseBill.textContent = "Billed ₹37,990/year";
-        enterpriseBtn.href = "{{ url_for('auth.subscription') }}?plan=enterprise&cycle=yearly";
-    }
-
-    if (monthlyBtn && yearlyBtn) {
-        monthlyBtn.addEventListener("click", setMonthly);
-        yearlyBtn.addEventListener("click", setYearly);
-        setYearly();
-    }
+    
+    
 
     const cursorGlow = document.getElementById("cursorGlow");
 
