@@ -4859,77 +4859,10 @@ def request_set_redemption():
         }), 500
 
 
-@admin_bp.route("/api/print-agent/jobs", methods=["GET"])
-def get_print_jobs():
-
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
-
-    if not token:
-        return {"success": False}, 401
-
-    db = get_db()
-
-    session_data = db.print_agent_sessions.find_one({
-        "token": token
-    })
-
-    if not session_data:
-        return {"success": False}, 401
-
-    company_id = session_data.get("company_id")
-
-    job = db.print_jobs.find_one({
-        "company_id": company_id,
-        "status": "pending"
-    })
-
-    if not job:
-        return {
-            "success": True,
-            "job": None
-        }
-
-    return {
-        "success": True,
-        "job": {
-            "id": str(job["_id"]),
-            "raw_data": job.get("raw_data", "")
-        }
-    }
 
 
-@admin_bp.route("/api/print-agent/job-complete", methods=["POST"])
-def print_job_complete():
 
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
 
-    db = get_db()
-
-    session_data = db.print_agent_sessions.find_one({
-        "token": token
-    })
-
-    if not session_data:
-        return {"success": False}, 401
-
-    data = request.get_json(silent=True) or {}
-
-    job_id = data.get("job_id")
-
-    if not job_id:
-        return {"success": False}, 400
-
-    db.print_jobs.update_one(
-        {"_id": oid(job_id)},
-        {
-            "$set": {
-                "status": "printed",
-                "printed_at": datetime.utcnow()
-            }
-        }
-    )
-
-    return {"success": True}
 
 
 @admin_bp.route("/company-admin/distributors/edit/<distributor_id>", methods=["GET", "POST"])
@@ -5689,3 +5622,95 @@ def redeem_cn(coupon_id):
         flash(str(e), "danger")
 
     return redirect(url_for("admin.pending_redemptions"))
+
+from werkzeug.security import check_password_hash
+
+@admin_bp.route("/api/print-agent/login", methods=["POST"])
+@csrf.exempt
+def print_agent_login():
+    db = get_db()
+    data = request.get_json(silent=True) or {}
+
+    email = str(data.get("email", "")).strip().lower()
+    password = str(data.get("password", "")).strip()
+
+    user = db.users.find_one({"email": email})
+
+    if not user or not check_password_hash(user.get("password", ""), password):
+        return {"success": False, "message": "Invalid login"}, 401
+
+    if user.get("role") not in ["admin", "qr_employee"]:
+        return {"success": False, "message": "Access denied"}, 403
+
+    token = secrets.token_hex(32)
+
+    db.print_agent_sessions.insert_one({
+        "token": token,
+        "user_id": str(user["_id"]),
+        "company_id": user.get("company_id"),
+        "created_at": now()
+    })
+
+    return {
+        "success": True,
+        "token": token,
+        "company_id": user.get("company_id"),
+        "company_name": user.get("company_name", ""),
+        "user_name": user.get("name", "")
+    }
+
+
+@admin_bp.route("/api/print-agent/jobs", methods=["GET"])
+@csrf.exempt
+def print_agent_jobs():
+    db = get_db()
+    token = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+
+    session_data = db.print_agent_sessions.find_one({"token": token})
+    if not session_data:
+        return {"success": False, "message": "Unauthorized"}, 401
+
+    job = db.print_jobs.find_one({
+        "company_id": session_data.get("company_id"),
+        "status": "pending"
+    })
+
+    if not job:
+        return {"success": True, "job": None}
+
+    return {
+        "success": True,
+        "job": {
+            "id": str(job["_id"]),
+            "raw_data": job.get("raw_data", "")
+        }
+    }
+
+
+@admin_bp.route("/api/print-agent/job-complete", methods=["POST"])
+@csrf.exempt
+def print_agent_job_complete():
+    db = get_db()
+    token = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+
+    session_data = db.print_agent_sessions.find_one({"token": token})
+    if not session_data:
+        return {"success": False, "message": "Unauthorized"}, 401
+
+    data = request.get_json(silent=True) or {}
+    job_id = data.get("job_id")
+
+    db.print_jobs.update_one(
+        {
+            "_id": oid(job_id),
+            "company_id": session_data.get("company_id")
+        },
+        {
+            "$set": {
+                "status": "printed",
+                "printed_at": now()
+            }
+        }
+    )
+
+    return {"success": True}
