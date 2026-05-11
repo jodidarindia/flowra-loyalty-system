@@ -59,7 +59,36 @@ def send_company_credentials(to_email, contact_name, company_name, login_email, 
 
     return resend.Emails.send(params)
 
+def send_dealer_credentials(
+    to_email,
+    dealer_name,
+    dealer_code,
+    password,
+):
 
+    params = {
+        "from": "FLOWRA <noreply@flowralive.in>",
+        "to": [to_email],
+        "subject": "FLOWRA Dealer Login Credentials",
+        "html": f"""
+        <h2>Welcome to FLOWRA</h2>
+
+        <p>Hello {dealer_name},</p>
+
+        <p>Your dealer account has been created.</p>
+
+        <p><b>Dealer Code:</b> {dealer_code}</p>
+        <p><b>Password:</b> {password}</p>
+
+        <p>
+            <a href="https://loyalty.flowralive.in/dealer-login">
+                Login Here
+            </a>
+        </p>
+        """
+    }
+
+    return resend.Emails.send(params)
 
 PRINTER_NAME = "TSC TE244"
 
@@ -1859,6 +1888,7 @@ def company_admin_distributors_page():
 
 @admin_bp.route("/company-admin/distributors/add", methods=["POST"])
 def add_distributor():
+
     if "user_id" not in session or session.get("user_role") not in ["admin", "sales"]:
         flash("Please login first.", "warning")
         return redirect(url_for("auth.login"))
@@ -1881,7 +1911,15 @@ def add_distributor():
         flash("Dealer code and name are required.", "danger")
         return redirect(url_for("admin.company_admin_distributors_page"))
 
-    hashed_password = generate_password_hash(password) if password else None
+    if not password:
+        password = ''.join(
+            random.choices(
+                string.ascii_letters + string.digits,
+                k=8
+            )
+        )
+
+    hashed_password = generate_password_hash(password)
 
     existing = db.distributors.find_one({
         "dealer_code": dealer_code,
@@ -1949,7 +1987,20 @@ def add_distributor():
         "created_at": now()
     })
 
-    flash("Distributor added successfully.", "success")
+    try:
+
+        send_dealer_credentials(
+            to_email=email,
+            dealer_name=name,
+            dealer_code=dealer_code,
+            password=password
+        )
+
+    except Exception as e:
+        print("DEALER MAIL ERROR:", e)
+
+    flash("Distributor added successfully & credentials sent.", "success")
+
     return redirect(url_for("admin.company_admin_distributors_page"))
     
 
