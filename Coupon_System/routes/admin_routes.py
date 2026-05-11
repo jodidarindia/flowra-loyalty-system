@@ -4361,45 +4361,29 @@ def dealer_redemption_history_api(dealer_id):
         redeemed_by = r.get("redeemed_by")
 
         if redeemed_by:
-
             try:
-
-                dealer = db.distributors.find_one({
+                user = db.users.find_one({
                     "_id": oid(redeemed_by)
                 })
 
-                if dealer:
+                if user:
+                    redeemed_by_name = user.get("name", "Unknown")
+                else:
+                    redeemed_by_name = str(redeemed_by)
 
-                    redeemed_by_name = dealer.get(
-                        "name",
-                        "Unknown"
-                    )
-
-            except:
-                pass
+            except Exception:
+                redeemed_by_name = str(redeemed_by)
 
         history.append({
-
             "invoice_no": r.get("invoice_no", ""),
-
             "type": r.get("redemption_type", ""),
-
             "part_no": r.get("part_no", "-"),
-
             "product_name": r.get("product_name", "-"),
-
             "sets": int(r.get("sets_count") or 0),
-
             "coupons": int(r.get("coupons_count") or 0),
-
             "points": int(r.get("redeemed_points") or 0),
-
             "remarks": r.get("remarks", ""),
-
-            "redeemed_at": str(
-                r.get("created_at") or ""
-            ),
-
+            "redeemed_at": str(r.get("created_at") or ""),
             "redeemed_by": redeemed_by_name
         })
 
