@@ -4345,6 +4345,7 @@ def redemption_history():
 
 @admin_bp.route("/api/dealer/redemption-history/<dealer_id>", methods=["GET"])
 def dealer_redemption_history_api(dealer_id):
+
     db = get_db()
 
     rows = db.dealer_redemptions.find({
@@ -4354,17 +4355,52 @@ def dealer_redemption_history_api(dealer_id):
     history = []
 
     for r in rows:
+
+        redeemed_by_name = "Unknown"
+
+        redeemed_by = r.get("redeemed_by")
+
+        if redeemed_by:
+
+            try:
+
+                dealer = db.distributors.find_one({
+                    "_id": oid(redeemed_by)
+                })
+
+                if dealer:
+
+                    redeemed_by_name = dealer.get(
+                        "name",
+                        "Unknown"
+                    )
+
+            except:
+                pass
+
         history.append({
+
             "invoice_no": r.get("invoice_no", ""),
+
             "type": r.get("redemption_type", ""),
+
             "part_no": r.get("part_no", "-"),
+
             "product_name": r.get("product_name", "-"),
+
             "sets": int(r.get("sets_count") or 0),
+
             "coupons": int(r.get("coupons_count") or 0),
+
             "points": int(r.get("redeemed_points") or 0),
+
             "remarks": r.get("remarks", ""),
-            "redeemed_at": str(r.get("created_at") or ""),
-            "redeemed_by": str(r.get("redeemed_by") or "-")
+
+            "redeemed_at": str(
+                r.get("created_at") or ""
+            ),
+
+            "redeemed_by": redeemed_by_name
         })
 
     return jsonify({
