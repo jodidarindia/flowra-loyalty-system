@@ -4745,6 +4745,70 @@ def delete_entity(entity_type, record_id):
     return redirect(url_for(f"admin.company_admin_{entity_type}_page"))
 
 
+
+@admin_bp.route("/api/dealer/request-set-redemption", methods=["POST"])
+def request_set_redemption():
+    db = get_db()
+    data = request.get_json(silent=True) or {}
+
+    dealer_id = data.get("dealer_id")
+    set_key = data.get("set_key")
+
+    if not dealer_id or not set_key:
+        return {"success": False, "message": "Dealer ID and set key required"}, 400
+
+    dealer = db.distributors.find_one({"_id": oid(dealer_id)})
+
+    if not dealer:
+        return {"success": False, "message": "Dealer not found"}, 404
+
+    company_id = dealer.get("company_id")
+
+    existing = db.redemption_requests.find_one({
+        "dealer_id": dealer_id,
+        "set_key": set_key,
+        "status": {"$in": ["pending", "approved"]}
+    })
+
+    if existing:
+        return {
+            "success": False,
+            "message": "Redemption request already submitted"
+        }, 400
+
+    coupons = list(db.coupons.find({
+        "company_id": company_id,
+        "scanned_by": dealer_id,
+        "part_no": set_key,
+        "status": {"$in": ["scanned", "unused"]}
+    }).limit(10))
+
+    if len(coupons) < 10:
+        return {
+            "success": False,
+            "message": "Set is not complete yet"
+        }, 400
+
+    total_points = sum(int(c.get("points") or 0) for c in coupons)
+
+    db.redemption_requests.insert_one({
+        "dealer_id": dealer_id,
+        "dealer_name": dealer.get("name", ""),
+        "company_id": company_id,
+        "set_key": set_key,
+        "total_coupons": len(coupons),
+        "total_points": total_points,
+        "coupon_ids": [str(c["_id"]) for c in coupons],
+        "status": "pending",
+        "created_at": now()
+    })
+
+    return {
+        "success": True,
+        "message": "Redemption request sent successfully"
+    }
+
+
 @admin_bp.route("/company-admin/distributors/edit/<distributor_id>", methods=["GET", "POST"])
 def edit_distributor(distributor_id):
 

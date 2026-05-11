@@ -247,6 +247,26 @@ class ApiService {
     if (decoded is Map<String, dynamic>) return decoded;
     throw Exception(errorMessage);
   }
+  static Future<Map<String, dynamic>> requestSetRedemption(
+  String dealerId,
+  String setKey,
+) async {
+  final response = await http.post(
+    Uri.parse("$baseUrl/api/dealer/request-set-redemption"),
+    headers: await _authHeaders(json: true),
+    body: jsonEncode({
+      "dealer_id": dealerId,
+      "set_key": setKey,
+    }),
+  );
+
+  return _decodeMap(
+    response.body,
+    "Server returned invalid redemption request response",
+  );
+}
+
+
 }
 
 class ScanFeedbackService {
@@ -2427,16 +2447,42 @@ class _SetSummaryScreenState extends State<SetSummaryScreen> {
     try {
       final data = await ApiService.getSets(widget.dealer["id"]);
       if (!mounted) return;
+
       setState(() {
         sets = data["sets"] ?? [];
         loading = false;
       });
     } catch (e) {
       if (!mounted) return;
+
       setState(() => loading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Failed to load sets: $e")));
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to load sets: $e")),
+      );
+    }
+  }
+
+  Future<void> requestRedemption(String setKey) async {
+    try {
+      final data = await ApiService.requestSetRedemption(
+        widget.dealer["id"].toString(),
+        setKey,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(data["message"] ?? "Request submitted")),
+      );
+
+      await loadSets();
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Request failed: $e")),
+      );
     }
   }
 
@@ -2474,50 +2520,110 @@ class _SetSummaryScreenState extends State<SetSummaryScreen> {
   }
 
   Widget setCard(Map item) {
-    final label = (item["part_no"] ?? item["set_name"] ?? "-").toString();
-    final total = item["set_size"] ?? item["total"] ?? 10;
-    final scanned = item["total_scans"] ?? item["scanned"] ?? 0;
-    final pending = item["remaining_scans"] ?? item["pending"] ?? 0;
+  final label = (item["part_no"] ?? item["set_name"] ?? item["set_key"] ?? "-").toString();
+  final total = int.tryParse("${item["set_size"] ?? item["total"] ?? 10}") ?? 10;
+  final scanned = int.tryParse("${item["total_scans"] ?? item["scanned"] ?? 0}") ?? 0;
+  final pending = int.tryParse("${item["remaining_scans"] ?? item["pending"] ?? 0}") ?? 0;
+  final requestStatus = (item["redemption_status"] ?? "").toString().toLowerCase();
 
-    return Container(
-      margin: const EdgeInsets.only(top: 16),
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        gradient: AppGradients.sets,
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.10),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
+  final bool completed = scanned >= total && pending == 0;
+  final bool alreadyRequested =
+      requestStatus == "pending" || requestStatus == "approved";
+
+  return Container(
+    margin: const EdgeInsets.only(top: 16),
+    padding: const EdgeInsets.all(22),
+    decoration: BoxDecoration(
+      gradient: AppGradients.sets,
+      borderRadius: BorderRadius.circular(26),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.10),
+          blurRadius: 14,
+          offset: const Offset(0, 6),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Set $label",
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Set $label",
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 18,
+        ),
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            metricPill("Total", "$total"),
+            const SizedBox(width: 12),
+            metricPill("Scanned", "$scanned"),
+            const SizedBox(width: 12),
+            metricPill("Pending", "$pending"),
+          ],
+        ),
+        const SizedBox(height: 18),
+
+        if (alreadyRequested)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              requestStatus == "approved"
+                  ? "Redemption Approved"
+                  : "Redemption Request Pending",
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          )
+        else if (completed)
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: () => requestRedemption(label),
+              icon: const Icon(Icons.redeem),
+              label: const Text("Request Redemption"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF7C3AED),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
+          )
+        else
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Text(
+              "Complete all 10 coupons to request redemption",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              metricPill("Total", "$total"),
-              const SizedBox(width: 12),
-              metricPill("Scanned", "$scanned"),
-              const SizedBox(width: 12),
-              metricPill("Pending", "$pending"),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
