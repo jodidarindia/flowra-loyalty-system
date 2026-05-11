@@ -177,13 +177,22 @@
                                                 </a>
 
                                                 <form method="POST"
-                                                      action="{{ url_for('admin.delete_entity', entity_type='distributors', record_id=distributor.id) }}"
-                                                      style="margin:0;">
-                                                    <button type="submit"
-                                                            class="btn btn-danger btn-sm"
-                                                            onclick="return confirm('Delete this distributor?')">
-                                                        <i class="fa fa-trash"></i>
-                                                    </button>
+      action="{{ url_for('admin.delete_entity', entity_type='distributors', record_id=distributor.id) }}"
+      style="margin:0;">
+
+    <input type="hidden"
+           name="csrf_token"
+           value="{{ csrf_token() }}">
+
+    <button type="submit"
+            class="btn btn-danger btn-sm"
+            onclick="return confirm('Delete this distributor?')">
+
+        <i class="fa fa-trash"></i>
+
+    </button>
+
+</form>
                                                 </form>
                                             </div>
                                         </td>
