@@ -112,7 +112,7 @@
                                     <label>Role</label>
                                     <select name="role" class="form-select modern-input">
                                         <option value="qr_employee">QR Employee</option>
-                                        <option value="redeem_employee">Redeem Employee</option> <!-- ✅ added -->
+                                     
                                         <option value="employee">General Employee</option>
                                         <option value="sales">Salesman</option>
                                     </select>
@@ -141,20 +141,39 @@
 
                                     <tbody>
                                         {% for emp in employees %}
-                                        <tr>
-                                            <td>{{ emp[1] }}</td>
-                                            <td>{{ emp[2] }}</td>
-                                            <td>{{ emp[3] }}</td>
-                                            <td>
-                                                <a href="{{ url_for('admin.edit_employee', employee_id=emp[0]) }}" class="btn btn-sm btn-primary">Edit</a>
+                                       <tr>
+    <td>{{ emp.name }}</td>
 
-                                                <!-- ✅ DELETE CSRF FIX -->
-                                                <form method="POST" action="{{ url_for('admin.delete_employee', employee_id=emp[0]) }}" style="display:inline;">
-                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                    <button class="btn btn-sm btn-danger">Delete</button>
-                                                </form>
-                                            </td>
-                                        </tr>
+    <td>
+        {{ emp.email }}
+    </td>
+
+    <td>
+        {{ emp.role }}
+    </td>
+
+    <td class="d-flex gap-2">
+
+        <a href="{{ url_for('admin.edit_employee', employee_id=emp._id) }}"
+           class="btn btn-sm btn-primary">
+            Edit
+        </a>
+
+        <form method="POST"
+              action="{{ url_for('admin.delete_employee', employee_id=emp._id) }}"
+              style="display:inline;">
+
+            <input type="hidden"
+                   name="csrf_token"
+                   value="{{ csrf_token() }}">
+
+            <button class="btn btn-sm btn-danger">
+                Delete
+            </button>
+        </form>
+
+    </td>
+</tr>
                                         {% else %}
                                         <tr>
                                             <td colspan="4" class="text-center text-muted py-4">
