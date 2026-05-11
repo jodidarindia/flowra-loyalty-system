@@ -4746,127 +4746,117 @@ def delete_entity(entity_type, record_id):
 
 
 
+@csrf.exempt
 @admin_bp.route("/api/dealer/request-set-redemption", methods=["POST"])
 def request_set_redemption():
-    db = get_db()
-    data = request.get_json(silent=True) or {}
+    try:
+        db = get_db()
+        data = request.get_json(silent=True) or {}
 
-    dealer_id = data.get("dealer_id")
-    set_key = data.get("set_key")
+        dealer_id = str(data.get("dealer_id", "")).strip()
+        set_key = str(data.get("set_key", "")).strip()
 
-    if not dealer_id or not set_key:
-        return {"success": False, "message": "Dealer ID and set key required"}, 400
+        if not dealer_id or not set_key:
+            return jsonify({
+                "success": False,
+                "message": "Dealer ID and set key are required"
+            }), 400
 
-    dealer = db.distributors.find_one({"_id": oid(dealer_id)})
+        dealer = db.distributors.find_one({
+            "_id": oid(dealer_id),
+            "$or": [
+                {"is_deleted": 0},
+                {"is_deleted": False},
+                {"is_deleted": {"$exists": False}},
+                {"is_deleted": None}
+            ]
+        })
 
-    if not dealer:
-        return {"success": False, "message": "Dealer not found"}, 404
+        if not dealer:
+            return jsonify({
+                "success": False,
+                "message": "Dealer not found"
+            }), 404
 
-    company_id = dealer.get("company_id")
+        company_id = dealer.get("company_id")
 
-    existing = db.redemption_requests.find_one({
-        "dealer_id": dealer_id,
-        "set_key": set_key,
-        "status": {"$in": ["pending", "approved"]}
-    })
+        set_data = db.dealer_coupon_sets.find_one({
+            "dealer_id": dealer_id,
+            "part_no": set_key
+        })
 
-    if existing:
-        return {
+        if not set_data:
+            return jsonify({
+                "success": False,
+                "message": "Set not found"
+            }), 404
+
+        set_size = int(set_data.get("set_size") or 10)
+        total_scans = int(set_data.get("total_scans") or 0)
+
+        current_progress = total_scans % set_size
+        if current_progress == 0 and total_scans > 0:
+            current_progress = set_size
+
+        if current_progress < set_size:
+            return jsonify({
+                "success": False,
+                "message": "Complete all 10 coupons before requesting redemption"
+            }), 400
+
+        existing = db.redemption_requests.find_one({
+            "dealer_id": dealer_id,
+            "set_key": set_key,
+            "status": {"$in": ["pending", "approved"]}
+        })
+
+        if existing:
+            return jsonify({
+                "success": False,
+                "message": "Redemption request already submitted"
+            }), 400
+
+        coupons = list(db.coupons.find({
+            "company_id": company_id,
+            "part_no": set_key,
+            "$or": [
+                {"dealer_id": dealer_id},
+                {"scanned_by": dealer_id}
+            ],
+            "status": "scanned"
+        }).sort("scanned_at", -1).limit(set_size))
+
+        if len(coupons) < set_size:
+            return jsonify({
+                "success": False,
+                "message": "Complete scanned coupons not found for this set"
+            }), 400
+
+        total_points = sum(int(c.get("points") or 0) for c in coupons)
+
+        db.redemption_requests.insert_one({
+            "dealer_id": dealer_id,
+            "dealer_name": dealer.get("name", ""),
+            "company_id": company_id,
+            "set_key": set_key,
+            "total_coupons": len(coupons),
+            "total_points": total_points,
+            "coupon_ids": [str(c.get("_id")) for c in coupons],
+            "status": "pending",
+            "created_at": now()
+        })
+
+        return jsonify({
+            "success": True,
+            "message": "Redemption request sent successfully"
+        }), 200
+
+    except Exception as e:
+        current_app.logger.exception("Request set redemption error")
+        return jsonify({
             "success": False,
-            "message": "Redemption request already submitted"
-        }, 400
-
-    coupons = list(db.coupons.find({
-        "company_id": company_id,
-        "scanned_by": dealer_id,
-        "part_no": set_key,
-        "status": {"$in": ["scanned", "unused"]}
-    }).limit(10))
-
-    if len(coupons) < 10:
-        return {
-            "success": False,
-            "message": "Set is not complete yet"
-        }, 400
-
-    total_points = sum(int(c.get("points") or 0) for c in coupons)
-
-    db.redemption_requests.insert_one({
-        "dealer_id": dealer_id,
-        "dealer_name": dealer.get("name", ""),
-        "company_id": company_id,
-        "set_key": set_key,
-        "total_coupons": len(coupons),
-        "total_points": total_points,
-        "coupon_ids": [str(c["_id"]) for c in coupons],
-        "status": "pending",
-        "created_at": now()
-    })
-
-    return {
-        "success": True,
-        "message": "Redemption request sent successfully"
-    }
-
-@admin_bp.route("/api/print-agent/login", methods=["POST"])
-def print_agent_login():
-
-    data = request.get_json(silent=True) or {}
-
-    email = str(data.get("email", "")).strip().lower()
-    password = str(data.get("password", "")).strip()
-
-    if not email or not password:
-        return {
-            "success": False,
-            "message": "Email and password required"
-        }, 400
-
-    db = get_db()
-
-    user = db.users.find_one({
-        "email": email,
-        "$or": [
-            {"is_deleted": 0},
-            {"is_deleted": False},
-            {"is_deleted": {"$exists": False}},
-        ]
-    })
-
-    if not user:
-        return {
-            "success": False,
-            "message": "Invalid credentials"
-        }, 401
-
-    if not check_password_hash(user["password"], password):
-        return {
-            "success": False,
-            "message": "Invalid credentials"
-        }, 401
-
-    if user.get("role") not in ["admin", "qr_employee"]:
-        return {
-            "success": False,
-            "message": "Access denied"
-        }, 403
-
-    token = secrets.token_hex(32)
-
-    db.print_agent_sessions.insert_one({
-        "token": token,
-        "user_id": str(user["_id"]),
-        "company_id": user.get("company_id"),
-        "created_at": datetime.utcnow()
-    })
-
-    return {
-        "success": True,
-        "token": token,
-        "company_id": user.get("company_id"),
-        "company_name": user.get("company_name", ""),
-        "user_name": user.get("name", "")
-    }
+            "message": f"Server error: {str(e)}"
+        }), 500
 
 
 @admin_bp.route("/api/print-agent/jobs", methods=["GET"])
